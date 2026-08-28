@@ -12,8 +12,7 @@ public static class Localizer
 {
     private static readonly IReadOnlyDictionary<string, string> Chinese = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.2.0 Safe",
-        ["App.SafetySubtitle"] = "安全模式 · 仅允许 127.0.0.1:8111 · 不读画面/进程/内存 · 不注入游戏",
+        ["App.Title"] = "War Thunder UID Guard  v0.3.0 Safe",
         ["Label.Language"] = "语言",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "昵称",
@@ -26,6 +25,10 @@ public static class Localizer
         ["Button.AddOrUpdate"] = "添加 / 更新",
         ["Button.DeleteSelected"] = "删除选中",
         ["Button.TestAlert"] = "测试提醒",
+        ["OneDrive.Disabled"] = "OneDrive 同步",
+        ["OneDrive.Synced"] = "OneDrive 文件已更新",
+        ["OneDrive.Unavailable"] = "OneDrive 不可用",
+        ["OneDrive.Error"] = "OneDrive 同步失败",
         ["Hint.UidAliases"] = "UID 是永久主键；实时接口只返回昵称，因此至少填写一个当前昵称。对方改名后需补充新昵称。",
         ["Grid.Uid"] = "UID",
         ["Grid.AliasHistory"] = "昵称历史",
@@ -61,8 +64,7 @@ public static class Localizer
 
     private static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.2.0 Safe",
-        ["App.SafetySubtitle"] = "Safe mode · 127.0.0.1:8111 only · No screen/process/memory access · No injection",
+        ["App.Title"] = "War Thunder UID Guard  v0.3.0 Safe",
         ["Label.Language"] = "Language",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "Nickname",
@@ -75,6 +77,10 @@ public static class Localizer
         ["Button.AddOrUpdate"] = "Add / Update",
         ["Button.DeleteSelected"] = "Delete selected",
         ["Button.TestAlert"] = "Test alert",
+        ["OneDrive.Disabled"] = "OneDrive sync",
+        ["OneDrive.Synced"] = "OneDrive file updated",
+        ["OneDrive.Unavailable"] = "OneDrive unavailable",
+        ["OneDrive.Error"] = "OneDrive sync failed",
         ["Hint.UidAliases"] = "UID is the permanent key. The live API returns nicknames only, so add at least one current name and append new names after a rename.",
         ["Grid.Uid"] = "UID",
         ["Grid.AliasHistory"] = "Nickname history",

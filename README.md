@@ -1,4 +1,4 @@
-# War Thunder UID Guard v0.2.0 Safe
+# War Thunder UID Guard v0.3.0 Safe
 
 Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵称历史监听 War Thunder 的公开本地接口 `127.0.0.1:8111`。
 
@@ -8,8 +8,10 @@ Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵�
 - 每约 0.9 秒轮询 `/gamechat` 与 `/hudmsg`。
 - 首次连接超过 10 秒仍未成功时自动停止监控，并明确显示“连接失败”。
 - 支持简体中文和英文，可在运行时切换并记住语言选择；首次运行跟随 Windows 显示语言。
+- 可选 OneDrive 个人同步：使用 Windows 已登录的 OneDrive 文件夹同步黑名单，不需要公网 IP 或自建服务器。
+- 始终保留 `%LOCALAPPDATA%\WarThunderUIDGuard\blacklist.json` 本地副本，并保存最近 10 个自动备份。
 - 黑名单昵称出现在聊天或 HUD 战斗事件时，通过 Windows 通知区域提醒并播放系统提示音。
-- 数据只保存在 `%LOCALAPPDATA%\WarThunderUIDGuard\blacklist.json`。
+- OneDrive 同步关闭时，数据只保存在本机；同步失败时自动回退到本地副本。
 - 不读取游戏画面、进程或内存，不注入进程，不监听或模拟输入，不修改游戏文件。
 - HTTP 客户端强制只允许 `127.0.0.1:8111` 的 `/gamechat` 与 `/hudmsg`，并禁用代理和重定向。
 
@@ -22,6 +24,14 @@ War Thunder 的 8111 接口不会提供对局完整名单，也不会提供参�
 ## 运行
 
 运行发布目录中的 `WarThunderUIDGuard.exe`，添加记录，然后点击“开始监控”。游戏尚未运行或不在对局时，状态会显示“等待游戏进入对局”。
+
+## OneDrive 同步
+
+先在 Windows 中登录并正常运行 OneDrive，然后勾选程序顶部的“OneDrive 同步”。程序会自动使用：
+
+`OneDrive\WarThunderUIDGuard\blacklist.json`
+
+OneDrive 文件写入成功时显示绿色“文件已更新”，随后由 OneDrive 客户端负责上传；不可用或写入失败时继续使用本地数据。多台电脑合并时以 UID 为主键、保留昵称历史，并以更新时间较新的备注或删除操作为准。
 
 ## 构建
 

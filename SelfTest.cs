@@ -18,8 +18,42 @@ internal static class SelfTest
         Assert(MainForm.ShouldFailConnection(true, false), "running disconnected client times out");
         Assert(!MainForm.ShouldFailConnection(true, true), "connected client does not time out");
         Assert(!MainForm.ShouldFailConnection(false, false), "stopped client does not time out");
+        var now = DateTimeOffset.UtcNow;
+        var localData = new AppData
+        {
+            Language = "zh-CN",
+            OneDriveSyncEnabled = true,
+            Players = [new BlockedPlayer { Uid = "42", Note = "new", Aliases = ["Alpha"], UpdatedAt = now }]
+        };
+        var cloudData = new AppData
+        {
+            Players = [new BlockedPlayer { Uid = "42", Note = "old", Aliases = ["Beta"], UpdatedAt = now.AddMinutes(-1) }]
+        };
+        var merged = DataStore.Merge(localData, cloudData);
+        Assert(merged.Players.Single().Note == "new", "newest note wins during OneDrive merge");
+        Assert(merged.Players.Single().Aliases.Count == 2, "nickname histories are combined during OneDrive merge");
+        cloudData.DeletedPlayers = [new DeletedPlayer { Uid = "42", DeletedAt = now.AddMinutes(1) }];
+        Assert(DataStore.Merge(localData, cloudData).Players.Count == 0, "newer OneDrive deletion is retained");
+        localData.Players[0].UpdatedAt = now.AddMinutes(2);
+        Assert(DataStore.Merge(localData, cloudData).Players.Count == 1, "newer re-add wins over an old deletion");
+        var testDirectory = Path.Combine(Path.GetTempPath(), $"WTUIDGuard-selftest-{Guid.NewGuid():N}");
+        try
+        {
+            var store = new DataStore(testDirectory, "");
+            store.Save(new AppData());
+            var fallbackData = new AppData { OneDriveSyncEnabled = true };
+            var fallbackResult = store.Save(fallbackData);
+            Assert(File.Exists(store.DataFile), "local data is saved before OneDrive sync");
+            Assert(Directory.GetFiles(store.BackupDirectory, "blacklist-*.json").Length == 1, "local backup is created");
+            Assert(fallbackResult.Status == OneDriveSyncStatus.Unavailable, "missing OneDrive falls back to local data");
+        }
+        finally
+        {
+            if (Directory.Exists(testDirectory)) Directory.Delete(testDirectory, true);
+        }
         Assert(Localizer.TranslationSetsMatch(), "Chinese and English translation keys match");
         Assert(Localizer.HasTranslation("Status.ConnectionFailed"), "connection failure is translated");
+        Assert(Localizer.HasTranslation("OneDrive.Synced"), "OneDrive status is translated");
         Assert(Localizer.Resolve("en") == AppLanguage.English, "saved English preference is restored");
         Assert(Localizer.Resolve("zh-CN") == AppLanguage.Chinese, "saved Chinese preference is restored");
         Localizer.Current = AppLanguage.English;

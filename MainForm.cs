@@ -15,12 +15,15 @@ public sealed class MainForm : Form
     private readonly Button _monitorButton = new();
     private readonly NotifyIcon _tray = new();
     private readonly System.Windows.Forms.Timer _connectionTimeoutTimer = new() { Interval = 10000 };
+    private readonly System.Windows.Forms.Timer _oneDriveSyncTimer = new() { Interval = 5000 };
     private readonly ComboBox _languageSelector = new();
     private readonly Label _languageLabel = new();
+    private readonly CheckBox _oneDriveSync = new();
     private readonly List<Detection> _detections = [];
     private string _statusKey = "Status.NotStarted";
     private string _statusPrefix = "○";
     private bool _initializingLanguage;
+    private bool _initializingOneDrive;
 
     public MainForm()
     {
@@ -68,10 +71,14 @@ public sealed class MainForm : Form
         });
         _client.IdentityObserved += (uid, alias, source, detail) => Ui(() => HandleDetection(uid, alias, source, detail));
         _connectionTimeoutTimer.Tick += (_, _) => HandleConnectionTimeout();
+        _oneDriveSyncTimer.Tick += (_, _) => RefreshFromOneDrive();
+        _oneDriveSyncTimer.Start();
         FormClosed += (_, _) =>
         {
             _connectionTimeoutTimer.Stop();
             _connectionTimeoutTimer.Dispose();
+            _oneDriveSyncTimer.Stop();
+            _oneDriveSyncTimer.Dispose();
             _client.Dispose();
             _tray.Visible = false;
             _tray.Dispose();
@@ -95,13 +102,6 @@ public sealed class MainForm : Form
             ForeColor = Color.FromArgb(35, 39, 48),
             AutoSize = true,
             Location = new Point(0, 4)
-        });
-        header.Controls.Add(new Label
-        {
-            Tag = "App.SafetySubtitle",
-            ForeColor = Color.DimGray,
-            AutoSize = true,
-            Location = new Point(3, 48)
         });
         _status.Text = "";
         _status.AutoSize = true;
@@ -129,11 +129,19 @@ public sealed class MainForm : Form
         _languageSelector.SelectedIndex = Localizer.Current == AppLanguage.Chinese ? 0 : 1;
         _initializingLanguage = false;
         _languageSelector.SelectedIndexChanged += (_, _) => ChangeLanguage();
+
+        _oneDriveSync.AutoSize = true;
+        _oneDriveSync.Top = 43;
+        _oneDriveSync.FlatStyle = FlatStyle.System;
+        _initializingOneDrive = true;
+        _oneDriveSync.Checked = _data.OneDriveSyncEnabled;
+        _initializingOneDrive = false;
+        _oneDriveSync.CheckedChanged += (_, _) => ChangeOneDriveSync();
         header.Resize += (_, _) =>
         {
             PositionHeaderControls();
         };
-        header.Controls.AddRange([_status, _monitorButton, _languageLabel, _languageSelector]);
+        header.Controls.AddRange([_status, _monitorButton, _languageLabel, _languageSelector, _oneDriveSync]);
         root.Controls.Add(header, 0, 0);
 
         var form = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 7, Padding = new Padding(0, 8, 0, 8) };
@@ -309,7 +317,8 @@ public sealed class MainForm : Form
         existing.Note = _note.Text.Trim();
         existing.Aliases = existing.Aliases.Concat(aliases).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         existing.UpdatedAt = DateTimeOffset.Now;
-        _store.Save(_data);
+        _data.DeletedPlayers.RemoveAll(item => item.Uid == uid);
+        SaveData();
         _uid.Clear(); _aliases.Clear(); _note.Clear();
         RefreshGrid();
     }
@@ -326,7 +335,9 @@ public sealed class MainForm : Form
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question) != DialogResult.Yes) return;
         _data.Players.Remove(player);
-        _store.Save(_data);
+        _data.DeletedPlayers.RemoveAll(item => item.Uid == player.Uid);
+        _data.DeletedPlayers.Add(new DeletedPlayer { Uid = player.Uid, DeletedAt = DateTimeOffset.Now });
+        SaveData();
         RefreshGrid();
     }
 
@@ -394,8 +405,34 @@ public sealed class MainForm : Form
         if (_initializingLanguage || _languageSelector.SelectedIndex < 0) return;
         Localizer.Current = _languageSelector.SelectedIndex == 0 ? AppLanguage.Chinese : AppLanguage.English;
         _data.Language = Localizer.Code(Localizer.Current);
-        _store.Save(_data);
+        SaveData();
         ApplyLocalization();
+    }
+
+    private void ChangeOneDriveSync()
+    {
+        if (_initializingOneDrive) return;
+        _data.OneDriveSyncEnabled = _oneDriveSync.Checked;
+        var result = _oneDriveSync.Checked ? _store.Synchronize(_data) : _store.Save(_data);
+        _data = result.Data;
+        RefreshGrid();
+        UpdateOneDriveSyncUi();
+    }
+
+    private void RefreshFromOneDrive()
+    {
+        if (!_data.OneDriveSyncEnabled) return;
+        var result = _store.RefreshFromOneDrive(_data);
+        _data = result.Data;
+        if (result.Changed) RefreshGrid();
+        UpdateOneDriveSyncUi();
+    }
+
+    private void SaveData()
+    {
+        var result = _store.Save(_data);
+        _data = result.Data;
+        UpdateOneDriveSyncUi();
     }
 
     private void ApplyLocalization()
@@ -413,6 +450,7 @@ public sealed class MainForm : Form
         RenderStatus();
         RefreshGrid();
         RenderDetectionLog();
+        UpdateOneDriveSyncUi();
         PositionHeaderControls();
     }
 
@@ -461,6 +499,27 @@ public sealed class MainForm : Form
         _monitorButton.Left = header.ClientSize.Width - _monitorButton.Width - 8;
         _languageSelector.Left = _monitorButton.Left - _languageSelector.Width - 12;
         _languageLabel.Left = _languageSelector.Left - _languageLabel.Width - 6;
+        _oneDriveSync.Left = _languageLabel.Left - _oneDriveSync.Width - 18;
+    }
+
+    private void UpdateOneDriveSyncUi()
+    {
+        var status = _data.OneDriveSyncEnabled ? _store.OneDriveStatus : OneDriveSyncStatus.Disabled;
+        _oneDriveSync.Text = Localizer.T(status switch
+        {
+            OneDriveSyncStatus.Synced => "OneDrive.Synced",
+            OneDriveSyncStatus.Unavailable => "OneDrive.Unavailable",
+            OneDriveSyncStatus.Error => "OneDrive.Error",
+            _ => "OneDrive.Disabled"
+        });
+        _oneDriveSync.ForeColor = status switch
+        {
+            OneDriveSyncStatus.Synced => Color.SeaGreen,
+            OneDriveSyncStatus.Unavailable => Color.DarkOrange,
+            OneDriveSyncStatus.Error => Color.Firebrick,
+            _ => Color.DimGray
+        };
+        PositionHeaderControls();
     }
 
     private void Ui(Action action)
