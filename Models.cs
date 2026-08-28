@@ -17,6 +17,7 @@ public sealed class BlockedPlayer
 public sealed class AppData
 {
     public int SchemaVersion { get; set; } = 1;
+    public string Language { get; set; } = "";
     public List<BlockedPlayer> Players { get; set; } = [];
 }
 

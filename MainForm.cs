@@ -15,25 +15,40 @@ public sealed class MainForm : Form
     private readonly Button _monitorButton = new();
     private readonly NotifyIcon _tray = new();
     private readonly System.Windows.Forms.Timer _connectionTimeoutTimer = new() { Interval = 10000 };
+    private readonly ComboBox _languageSelector = new();
+    private readonly Label _languageLabel = new();
+    private readonly List<Detection> _detections = [];
+    private string _statusKey = "Status.NotStarted";
+    private string _statusPrefix = "○";
+    private bool _initializingLanguage;
 
     public MainForm()
     {
-        Text = "War Thunder UID Guard  v0.1.3 Safe";
         MinimumSize = new Size(980, 660);
         Size = new Size(1080, 720);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Microsoft YaHei UI", 9);
         BackColor = Color.FromArgb(246, 247, 250);
 
+        DataStoreLoadException? loadError = null;
         try { _data = _store.Load(); }
-        catch (InvalidDataException ex)
+        catch (DataStoreLoadException ex)
         {
             _data = new AppData();
-            MessageBox.Show(ex.Message, "数据恢复", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            loadError = ex;
         }
 
+        Localizer.Current = Localizer.Resolve(_data.Language);
+
         BuildUi();
+        ApplyLocalization();
         RefreshGrid();
+        if (loadError is not null)
+            MessageBox.Show(
+                Localizer.F("Error.DataRecovery", loadError.BackupPath),
+                Localizer.T("Error.DataRecoveryTitle"),
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
 
         _tray.Icon = SystemIcons.Shield;
         _tray.Text = "War Thunder UID Guard";
@@ -49,8 +64,7 @@ public sealed class MainForm : Form
         _client.ConnectionChanged += (connected, text) => Ui(() =>
         {
             if (connected) _connectionTimeoutTimer.Stop();
-            _status.Text = connected ? "● " + text : "○ " + text;
-            _status.ForeColor = connected ? Color.SeaGreen : Color.DarkOrange;
+            SetStatus(text, connected ? "●" : "○", connected ? Color.SeaGreen : Color.DarkOrange);
         });
         _client.IdentityObserved += (uid, alias, source, detail) => Ui(() => HandleDetection(uid, alias, source, detail));
         _connectionTimeoutTimer.Tick += (_, _) => HandleConnectionTimeout();
@@ -84,30 +98,42 @@ public sealed class MainForm : Form
         });
         header.Controls.Add(new Label
         {
-            Text = "安全模式 · 仅允许 127.0.0.1:8111 · 不读画面/进程/内存 · 不注入游戏",
+            Tag = "App.SafetySubtitle",
             ForeColor = Color.DimGray,
             AutoSize = true,
             Location = new Point(3, 48)
         });
-        _status.Text = "○ 尚未开始监控";
+        _status.Text = "";
         _status.AutoSize = true;
         _status.ForeColor = Color.DarkOrange;
         _status.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         _status.Location = new Point(760, 10);
-        _monitorButton.Text = "开始监控";
-        _monitorButton.Size = new Size(118, 36);
+        _monitorButton.Tag = "Button.StartMonitoring";
+        _monitorButton.Size = new Size(142, 36);
         _monitorButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         _monitorButton.Location = new Point(885, 34);
         _monitorButton.BackColor = Color.FromArgb(45, 108, 223);
         _monitorButton.ForeColor = Color.White;
         _monitorButton.FlatStyle = FlatStyle.Flat;
         _monitorButton.Click += (_, _) => ToggleMonitor();
+
+        _languageLabel.Tag = "Label.Language";
+        _languageLabel.AutoSize = true;
+        _languageLabel.ForeColor = Color.DimGray;
+        _languageLabel.Top = 45;
+        _languageSelector.DropDownStyle = ComboBoxStyle.DropDownList;
+        _languageSelector.Size = new Size(108, 28);
+        _languageSelector.Top = 39;
+        _languageSelector.Items.AddRange(["中文", "English"]);
+        _initializingLanguage = true;
+        _languageSelector.SelectedIndex = Localizer.Current == AppLanguage.Chinese ? 0 : 1;
+        _initializingLanguage = false;
+        _languageSelector.SelectedIndexChanged += (_, _) => ChangeLanguage();
         header.Resize += (_, _) =>
         {
-            _status.Left = header.ClientSize.Width - _status.Width - 8;
-            _monitorButton.Left = header.ClientSize.Width - _monitorButton.Width - 8;
+            PositionHeaderControls();
         };
-        header.Controls.AddRange([_status, _monitorButton]);
+        header.Controls.AddRange([_status, _monitorButton, _languageLabel, _languageSelector]);
         root.Controls.Add(header, 0, 0);
 
         var form = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 7, Padding = new Padding(0, 8, 0, 8) };
@@ -118,20 +144,17 @@ public sealed class MainForm : Form
         form.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48));
         form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
         form.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
-        AddField(form, "UID", _uid, 0);
-        AddField(form, "昵称", _aliases, 2);
-        AddField(form, "备注", _note, 4);
-        _aliases.PlaceholderText = "当前昵称；旧昵称（用分号分隔）";
-        _uid.PlaceholderText = "数字账号 UID";
-        _note.PlaceholderText = "可选";
-        var add = MakeButton("添加 / 更新", Color.FromArgb(33, 150, 83));
+        AddField(form, "Label.Uid", _uid, 0);
+        AddField(form, "Label.Nickname", _aliases, 2);
+        AddField(form, "Label.Note", _note, 4);
+        var add = MakeButton("Button.AddOrUpdate", Color.FromArgb(33, 150, 83));
         add.Dock = DockStyle.Fill;
         add.Margin = new Padding(8, 0, 0, 32);
         add.Click += (_, _) => AddOrUpdate();
         form.Controls.Add(add, 6, 0);
         var hint = new Label
         {
-            Text = "UID 是永久主键；实时接口只返回昵称，因此至少填写一个当前昵称。对方改名后需补充新昵称。",
+            Tag = "Hint.UidAliases",
             ForeColor = Color.FromArgb(160, 88, 0),
             AutoSize = true,
             Dock = DockStyle.Fill
@@ -164,10 +187,10 @@ public sealed class MainForm : Form
             WrapContents = false,
             Padding = new Padding(0, 3, 0, 0)
         };
-        var remove = MakeButton("删除选中", Color.FromArgb(180, 55, 55));
+        var remove = MakeButton("Button.DeleteSelected", Color.FromArgb(180, 55, 55));
         remove.Size = new Size(96, 30);
         remove.Click += (_, _) => RemoveSelected();
-        var simulate = MakeButton("测试提醒", Color.FromArgb(94, 80, 180));
+        var simulate = MakeButton("Button.TestAlert", Color.FromArgb(94, 80, 180));
         simulate.Size = new Size(96, 30);
         simulate.Click += (_, _) => Simulate();
         toolbarButtons.Controls.AddRange([simulate, remove]);
@@ -187,10 +210,10 @@ public sealed class MainForm : Form
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _grid.BackgroundColor = Color.White;
         _grid.BorderStyle = BorderStyle.FixedSingle;
-        _grid.Columns.Add("uid", "UID");
-        _grid.Columns.Add("aliases", "昵称历史");
-        _grid.Columns.Add("note", "备注");
-        _grid.Columns.Add("updated", "更新时间");
+        _grid.Columns.Add("uid", "");
+        _grid.Columns.Add("aliases", "");
+        _grid.Columns.Add("note", "");
+        _grid.Columns.Add("updated", "");
         _grid.Columns[0].FillWeight = 18;
         _grid.Columns[1].FillWeight = 36;
         _grid.Columns[2].FillWeight = 28;
@@ -198,24 +221,24 @@ public sealed class MainForm : Form
         gridPanel.Controls.Add(_grid, 0, 1);
         root.Controls.Add(gridPanel, 0, 2);
 
-        var logPanel = new GroupBox { Text = "检测记录（仅本次运行）", Dock = DockStyle.Fill, Padding = new Padding(8) };
+        var logPanel = new GroupBox { Tag = "Group.DetectionLog", Dock = DockStyle.Fill, Padding = new Padding(8) };
         _log.Dock = DockStyle.Fill;
         _log.HorizontalScrollbar = true;
         logPanel.Controls.Add(_log);
         root.Controls.Add(logPanel, 0, 3);
     }
 
-    private static void AddField(TableLayoutPanel panel, string label, Control control, int column)
+    private static void AddField(TableLayoutPanel panel, string textKey, Control control, int column)
     {
-        panel.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, column, 0);
+        panel.Controls.Add(new Label { Tag = textKey, AutoSize = true, Anchor = AnchorStyles.Left }, column, 0);
         control.Dock = DockStyle.Fill;
         control.Margin = new Padding(3, 0, 8, 32);
         panel.Controls.Add(control, column + 1, 0);
     }
 
-    private static Button MakeButton(string text, Color color) => new()
+    private static Button MakeButton(string textKey, Color color) => new()
     {
-        Text = text,
+        Tag = textKey,
         BackColor = color,
         ForeColor = Color.White,
         FlatStyle = FlatStyle.Flat
@@ -227,16 +250,16 @@ public sealed class MainForm : Form
         {
             _connectionTimeoutTimer.Stop();
             _client.Stop();
-            _monitorButton.Text = "开始监控";
+            RefreshMonitorButton();
+            SetStatus("Status.Stopped", "○", Color.DarkOrange);
         }
         else
         {
             _client.Start();
             _connectionTimeoutTimer.Stop();
             _connectionTimeoutTimer.Start();
-            _monitorButton.Text = "停止监控";
-            _status.Text = "○ 正在连接…";
-            _status.ForeColor = Color.DarkOrange;
+            RefreshMonitorButton();
+            SetStatus("Status.Connecting", "○", Color.DarkOrange);
         }
     }
 
@@ -246,9 +269,8 @@ public sealed class MainForm : Form
         if (!ShouldFailConnection(_client.IsRunning, _client.IsConnected)) return;
 
         _client.Stop();
-        _monitorButton.Text = "开始监控";
-        _status.Text = "✕ 连接失败";
-        _status.ForeColor = Color.Firebrick;
+        RefreshMonitorButton();
+        SetStatus("Status.ConnectionFailed", "✕", Color.Firebrick);
     }
 
     internal static bool ShouldFailConnection(bool isRunning, bool isConnected) =>
@@ -261,12 +283,20 @@ public sealed class MainForm : Form
             .Select(Matcher.Normalize).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (uid.Length < 3 || !uid.All(char.IsDigit))
         {
-            MessageBox.Show("UID 只能包含数字。", "输入错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(
+                Localizer.T("Error.InvalidUid"),
+                Localizer.T("Error.InputTitle"),
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
         if (aliases.Count == 0)
         {
-            MessageBox.Show("实时接口不返回 UID，请至少填写一个当前昵称。", "需要昵称", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(
+                Localizer.T("Error.NicknameRequired"),
+                Localizer.T("Error.NicknameRequiredTitle"),
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
 
@@ -290,7 +320,11 @@ public sealed class MainForm : Form
         var uid = _grid.SelectedRows[0].Cells[0].Value?.ToString();
         var player = _data.Players.FirstOrDefault(p => p.Uid == uid);
         if (player is null) return;
-        if (MessageBox.Show($"删除 UID {uid}？", "确认删除", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        if (MessageBox.Show(
+                Localizer.F("Confirm.Delete", uid ?? ""),
+                Localizer.T("Confirm.DeleteTitle"),
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question) != DialogResult.Yes) return;
         _data.Players.Remove(player);
         _store.Save(_data);
         RefreshGrid();
@@ -305,29 +339,45 @@ public sealed class MainForm : Form
             player = _data.Players.FirstOrDefault(p => p.Uid == uid) ?? DemoPlayer();
         }
         else player = _data.Players.FirstOrDefault() ?? DemoPlayer();
-        var detection = new Detection(player, player.Aliases.FirstOrDefault() ?? "示例昵称", "测试", "测试提醒", DateTimeOffset.Now);
+        var detection = new Detection(
+            player,
+            player.Aliases.FirstOrDefault() ?? Localizer.T("Demo.Alias"),
+            "Source.Test",
+            Localizer.T("Demo.Detail"),
+            DateTimeOffset.Now);
         ShowAlert(detection);
     }
 
-    private static BlockedPlayer DemoPlayer() => new() { Uid = "123456789", Note = "测试记录", Aliases = ["示例昵称"] };
+    private static BlockedPlayer DemoPlayer() => new()
+    {
+        Uid = "123456789",
+        Note = Localizer.T("Demo.Note"),
+        Aliases = [Localizer.T("Demo.Alias")]
+    };
 
     private void HandleDetection(string uid, string alias, string source, string detail)
     {
         var player = _data.Players.FirstOrDefault(p => p.Uid == uid);
         if (player is null) return;
         var detection = new Detection(player, alias, source, detail, DateTimeOffset.Now);
-        _log.Items.Insert(0, $"[{detection.DetectedAt:HH:mm:ss}] UID {uid} / {alias} / {source} / {detail}");
+        _detections.Insert(0, detection);
+        RenderDetectionLog();
         ShowAlert(detection);
     }
 
     private void ShowAlert(Detection detection)
     {
         System.Media.SystemSounds.Exclamation.Play();
-        var note = string.IsNullOrWhiteSpace(detection.Player.Note) ? "无" : detection.Player.Note;
+        var note = string.IsNullOrWhiteSpace(detection.Player.Note) ? Localizer.T("Value.None") : detection.Player.Note;
         _tray.ShowBalloonTip(
             10000,
-            "发现黑名单玩家",
-            $"UID：{detection.Player.Uid}\n昵称：{detection.MatchedAlias}\n来源：{detection.Source}\n备注：{note}",
+            Localizer.T("Alert.Title"),
+            Localizer.F(
+                "Alert.Body",
+                detection.Player.Uid,
+                detection.MatchedAlias,
+                Localizer.T(detection.Source),
+                note),
             ToolTipIcon.Warning);
     }
 
@@ -336,7 +386,81 @@ public sealed class MainForm : Form
         _grid.Rows.Clear();
         foreach (var p in _data.Players.OrderByDescending(p => p.UpdatedAt))
             _grid.Rows.Add(p.Uid, p.AliasSummary, p.Note, p.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"));
-        _count.Text = $"黑名单：{_data.Players.Count} 人";
+        _count.Text = Localizer.F("Count.Blacklist", _data.Players.Count);
+    }
+
+    private void ChangeLanguage()
+    {
+        if (_initializingLanguage || _languageSelector.SelectedIndex < 0) return;
+        Localizer.Current = _languageSelector.SelectedIndex == 0 ? AppLanguage.Chinese : AppLanguage.English;
+        _data.Language = Localizer.Code(Localizer.Current);
+        _store.Save(_data);
+        ApplyLocalization();
+    }
+
+    private void ApplyLocalization()
+    {
+        Text = Localizer.T("App.Title");
+        ApplyTaggedText(this);
+        _uid.PlaceholderText = Localizer.T("Placeholder.Uid");
+        _aliases.PlaceholderText = Localizer.T("Placeholder.Aliases");
+        _note.PlaceholderText = Localizer.T("Placeholder.Note");
+        _grid.Columns[0].HeaderText = Localizer.T("Grid.Uid");
+        _grid.Columns[1].HeaderText = Localizer.T("Grid.AliasHistory");
+        _grid.Columns[2].HeaderText = Localizer.T("Grid.Note");
+        _grid.Columns[3].HeaderText = Localizer.T("Grid.UpdatedAt");
+        RefreshMonitorButton();
+        RenderStatus();
+        RefreshGrid();
+        RenderDetectionLog();
+        PositionHeaderControls();
+    }
+
+    private static void ApplyTaggedText(Control parent)
+    {
+        foreach (Control control in parent.Controls)
+        {
+            if (control.Tag is string key) control.Text = Localizer.T(key);
+            ApplyTaggedText(control);
+        }
+    }
+
+    private void RefreshMonitorButton() =>
+        _monitorButton.Text = Localizer.T(_client.IsRunning ? "Button.StopMonitoring" : "Button.StartMonitoring");
+
+    private void SetStatus(string key, string prefix, Color color)
+    {
+        _statusKey = key;
+        _statusPrefix = prefix;
+        _status.ForeColor = color;
+        RenderStatus();
+    }
+
+    private void RenderStatus()
+    {
+        _status.Text = $"{_statusPrefix} {Localizer.T(_statusKey)}";
+        if (_status.Parent is not null)
+            _status.Left = _status.Parent.ClientSize.Width - _status.Width - 8;
+    }
+
+    private void RenderDetectionLog()
+    {
+        _log.BeginUpdate();
+        _log.Items.Clear();
+        foreach (var detection in _detections)
+            _log.Items.Add(
+                $"[{detection.DetectedAt:HH:mm:ss}] UID {detection.Player.Uid} / {detection.MatchedAlias} / " +
+                $"{Localizer.T(detection.Source)} / {detection.Detail}");
+        _log.EndUpdate();
+    }
+
+    private void PositionHeaderControls()
+    {
+        if (_monitorButton.Parent is not Control header) return;
+        _status.Left = header.ClientSize.Width - _status.Width - 8;
+        _monitorButton.Left = header.ClientSize.Width - _monitorButton.Width - 8;
+        _languageSelector.Left = _monitorButton.Left - _languageSelector.Width - 12;
+        _languageLabel.Left = _languageSelector.Left - _languageLabel.Width - 6;
     }
 
     private void Ui(Action action)

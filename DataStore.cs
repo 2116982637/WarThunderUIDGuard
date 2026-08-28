@@ -2,6 +2,12 @@ using System.Text.Json;
 
 namespace WarThunderUIDGuard;
 
+public sealed class DataStoreLoadException(string backupPath, Exception innerException)
+    : Exception("Blacklist data could not be read.", innerException)
+{
+    public string BackupPath { get; } = backupPath;
+}
+
 public sealed class DataStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -30,7 +36,7 @@ public sealed class DataStore
         {
             var backup = Path.Combine(DataDirectory, $"blacklist.invalid-{DateTime.Now:yyyyMMdd-HHmmss}.json");
             File.Copy(DataFile, backup, true);
-            throw new InvalidDataException($"黑名单文件无法读取，已备份到：{backup}", ex);
+            throw new DataStoreLoadException(backup, ex);
         }
     }
 

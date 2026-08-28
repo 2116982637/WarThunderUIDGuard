@@ -32,7 +32,7 @@ public sealed class WarThunderClient : IDisposable
         _cts?.Cancel();
         _cts?.Dispose();
         _cts = null;
-        SetConnection(false, "监控已停止");
+        SetConnection(false, "Status.Stopped");
     }
 
     private async Task PollLoopAsync(CancellationToken token)
@@ -43,7 +43,7 @@ public sealed class WarThunderClient : IDisposable
             {
                 await PollChatAsync(token);
                 await PollHudAsync(token);
-                SetConnection(true, "已连接 War Thunder 8111");
+                SetConnection(true, "Status.Connected");
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
@@ -51,7 +51,7 @@ public sealed class WarThunderClient : IDisposable
             }
             catch
             {
-                SetConnection(false, "等待游戏进入对局…");
+                SetConnection(false, "Status.WaitingForBattle");
             }
 
             try { await Task.Delay(900, token); }
@@ -70,7 +70,7 @@ public sealed class WarThunderClient : IDisposable
             _lastChatId = Math.Max(_lastChatId, id);
             var sender = GetString(item, "sender");
             var message = GetString(item, "msg");
-            Observe($"chat:{id}", sender, message, "聊天");
+            Observe($"chat:{id}", sender, message, "Source.Chat");
         }
     }
 
@@ -85,7 +85,7 @@ public sealed class WarThunderClient : IDisposable
         {
             var id = GetInt(item, "id", -1);
             _lastDamageId = Math.Max(_lastDamageId, id);
-            Observe($"damage:{id}", GetString(item, "sender"), GetString(item, "msg"), "战斗事件");
+            Observe($"damage:{id}", GetString(item, "sender"), GetString(item, "msg"), "Source.CombatEvent");
         }
 
         if (doc.RootElement.TryGetProperty("events", out var events) && events.ValueKind == JsonValueKind.Array)
@@ -94,14 +94,14 @@ public sealed class WarThunderClient : IDisposable
             if (item.ValueKind == JsonValueKind.String)
             {
                 var msg = item.GetString() ?? "";
-                Observe($"event:{_lastEventId + 1}:{msg}", "", msg, "HUD 事件");
+                Observe($"event:{_lastEventId + 1}:{msg}", "", msg, "Source.HudEvent");
                 _lastEventId++;
             }
             else if (item.ValueKind == JsonValueKind.Object)
             {
                 var id = GetInt(item, "id", _lastEventId + 1);
                 _lastEventId = Math.Max(_lastEventId, id);
-                Observe($"event:{id}", GetString(item, "sender"), GetString(item, "msg"), "HUD 事件");
+                Observe($"event:{id}", GetString(item, "sender"), GetString(item, "msg"), "Source.HudEvent");
             }
         }
     }
@@ -124,7 +124,7 @@ public sealed class WarThunderClient : IDisposable
     {
         var uri = new Uri(AllowedBaseAddress, relativeUrl);
         if (!IsAllowedEndpoint(uri))
-            throw new InvalidOperationException("安全策略拒绝访问非 War Thunder 本地接口。");
+            throw new InvalidOperationException("Security policy rejected a non-local War Thunder endpoint.");
 
         using var response = await _http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, token);
         response.EnsureSuccessStatusCode();

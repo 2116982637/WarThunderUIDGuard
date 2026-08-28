@@ -18,6 +18,14 @@ internal static class SelfTest
         Assert(MainForm.ShouldFailConnection(true, false), "running disconnected client times out");
         Assert(!MainForm.ShouldFailConnection(true, true), "connected client does not time out");
         Assert(!MainForm.ShouldFailConnection(false, false), "stopped client does not time out");
+        Assert(Localizer.TranslationSetsMatch(), "Chinese and English translation keys match");
+        Assert(Localizer.HasTranslation("Status.ConnectionFailed"), "connection failure is translated");
+        Assert(Localizer.Resolve("en") == AppLanguage.English, "saved English preference is restored");
+        Assert(Localizer.Resolve("zh-CN") == AppLanguage.Chinese, "saved Chinese preference is restored");
+        Localizer.Current = AppLanguage.English;
+        Assert(Localizer.T("Button.StartMonitoring") == "Start monitoring", "English UI text is available");
+        Localizer.Current = AppLanguage.Chinese;
+        Assert(Localizer.T("Button.StartMonitoring") == "开始监控", "Chinese UI text is available");
         Console.WriteLine("SELF-TEST OK");
     }
 

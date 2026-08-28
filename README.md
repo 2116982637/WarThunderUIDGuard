@@ -1,4 +1,4 @@
-# War Thunder UID Guard v0.1.3 Safe
+# War Thunder UID Guard v0.2.0 Safe
 
 Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵称历史监听 War Thunder 的公开本地接口 `127.0.0.1:8111`。
 
@@ -7,6 +7,7 @@ Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵�
 - UID 作为记录主键，保存多个当前/历史昵称与备注。
 - 每约 0.9 秒轮询 `/gamechat` 与 `/hudmsg`。
 - 首次连接超过 10 秒仍未成功时自动停止监控，并明确显示“连接失败”。
+- 支持简体中文和英文，可在运行时切换并记住语言选择；首次运行跟随 Windows 显示语言。
 - 黑名单昵称出现在聊天或 HUD 战斗事件时，通过 Windows 通知区域提醒并播放系统提示音。
 - 数据只保存在 `%LOCALAPPDATA%\WarThunderUIDGuard\blacklist.json`。
 - 不读取游戏画面、进程或内存，不注入进程，不监听或模拟输入，不修改游戏文件。
