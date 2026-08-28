@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Win32;
 
@@ -11,6 +13,10 @@ public sealed class DataStoreLoadException(string backupPath, Exception innerExc
 
 public sealed class DataStore
 {
+    internal const string SharedBlacklistUrl =
+        "https://1drv.ms/u/c/e49649a6a25c7af6/IQB7KQ5tKejhRJNs9D7QYLLQAdxJ7B5Ie9V5pfH1k8-Djnc?e=XXH1dv";
+    internal const int MaxRemoteBytes = 1024 * 1024;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -18,15 +24,21 @@ public sealed class DataStore
     };
 
     private readonly string? _oneDriveRootOverride;
-    private DateTime _lastCloudWriteUtc;
-    private long _lastCloudLength = -1;
+    private readonly Func<Uri, CancellationToken, Task<string>> _remoteFetcher;
+    private readonly string _sharedBlacklistUrl;
 
-    public DataStore(string? dataDirectory = null, string? oneDriveRoot = null)
+    public DataStore(
+        string? dataDirectory = null,
+        string? oneDriveRoot = null,
+        Func<Uri, CancellationToken, Task<string>>? remoteFetcher = null,
+        string? sharedBlacklistUrl = null)
     {
         DataDirectory = dataDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "WarThunderUIDGuard");
         _oneDriveRootOverride = oneDriveRoot;
+        _remoteFetcher = remoteFetcher ?? FetchRemoteJsonAsync;
+        _sharedBlacklistUrl = sharedBlacklistUrl ?? SharedBlacklistUrl;
     }
 
     public string DataDirectory { get; }
@@ -54,13 +66,8 @@ public sealed class DataStore
         try
         {
             var data = Read(DataFile);
-            if (!data.OneDriveSyncEnabled)
-            {
-                OneDriveStatus = OneDriveSyncStatus.Disabled;
-                return data;
-            }
-
-            return Synchronize(data).Data;
+            OneDriveStatus = data.OneDriveSyncEnabled ? OneDriveSyncStatus.Ready : OneDriveSyncStatus.Disabled;
+            return data;
         }
         catch (Exception ex)
         {
@@ -76,18 +83,19 @@ public sealed class DataStore
         BackupLocalFile();
         WriteAtomic(DataFile, data);
 
-        if (!data.OneDriveSyncEnabled)
-        {
-            OneDriveStatus = OneDriveSyncStatus.Disabled;
-            LastOneDriveError = null;
-            return new OneDriveSyncResult(data, OneDriveStatus, false);
-        }
-
-        return Synchronize(data);
+        OneDriveStatus = data.OneDriveSyncEnabled ? OneDriveSyncStatus.Ready : OneDriveSyncStatus.Disabled;
+        LastOneDriveError = null;
+        return new OneDriveSyncResult(data, OneDriveStatus, false);
     }
 
-    public OneDriveSyncResult Synchronize(AppData local)
+    public OneDriveSyncResult UploadToOneDrive(AppData local)
     {
+        if (!local.OneDriveSyncEnabled)
+        {
+            OneDriveStatus = OneDriveSyncStatus.Disabled;
+            return new OneDriveSyncResult(local, OneDriveStatus, false);
+        }
+
         var cloudPath = OneDriveDataFile;
         if (cloudPath is null)
             return SetSyncFailure(local, OneDriveSyncStatus.Unavailable, null);
@@ -106,10 +114,10 @@ public sealed class DataStore
             }
 
             var changed = !Equivalent(local, merged);
+            BackupLocalFile();
             WriteAtomic(DataFile, merged);
             WriteAtomic(cloudPath, merged);
-            RememberCloudStamp(cloudPath);
-            OneDriveStatus = OneDriveSyncStatus.Synced;
+            OneDriveStatus = OneDriveSyncStatus.Uploaded;
             LastOneDriveError = null;
             return new OneDriveSyncResult(merged, OneDriveStatus, changed);
         }
@@ -119,7 +127,9 @@ public sealed class DataStore
         }
     }
 
-    public OneDriveSyncResult RefreshFromOneDrive(AppData local)
+    public async Task<OneDriveSyncResult> PullFromOneDriveAsync(
+        AppData local,
+        CancellationToken cancellationToken = default)
     {
         if (!local.OneDriveSyncEnabled)
         {
@@ -127,55 +137,20 @@ public sealed class DataStore
             return new OneDriveSyncResult(local, OneDriveStatus, false);
         }
 
-        var cloudPath = OneDriveDataFile;
-        if (cloudPath is null)
+        if (!Uri.TryCreate(_sharedBlacklistUrl, UriKind.Absolute, out var sharedUri) ||
+            !IsAllowedRemoteUri(sharedUri))
             return SetSyncFailure(local, OneDriveSyncStatus.Unavailable, null);
 
+        OneDriveStatus = OneDriveSyncStatus.Pulling;
+        LastOneDriveError = null;
         try
         {
-            if (!File.Exists(cloudPath)) return Synchronize(local);
-
-            var info = new FileInfo(cloudPath);
-            if (info.LastWriteTimeUtc == _lastCloudWriteUtc && info.Length == _lastCloudLength)
-            {
-                OneDriveStatus = OneDriveSyncStatus.Synced;
-                return new OneDriveSyncResult(local, OneDriveStatus, false);
-            }
-
-            var merged = Merge(local, Read(cloudPath));
+            var cloud = ReadJson(await _remoteFetcher(sharedUri, cancellationToken));
+            var merged = Merge(local, cloud);
             var changed = !Equivalent(local, merged);
+            BackupLocalFile();
             WriteAtomic(DataFile, merged);
-            if (changed) WriteAtomic(cloudPath, merged);
-            RememberCloudStamp(cloudPath);
-            OneDriveStatus = OneDriveSyncStatus.Synced;
-            LastOneDriveError = null;
-            return new OneDriveSyncResult(merged, OneDriveStatus, changed);
-        }
-        catch (Exception ex)
-        {
-            return SetSyncFailure(local, OneDriveSyncStatus.Error, ex);
-        }
-    }
-
-    public OneDriveSyncResult PullFromOneDrive(AppData local)
-    {
-        if (!local.OneDriveSyncEnabled)
-        {
-            OneDriveStatus = OneDriveSyncStatus.Disabled;
-            return new OneDriveSyncResult(local, OneDriveStatus, false);
-        }
-
-        var cloudPath = OneDriveDataFile;
-        if (cloudPath is null || !File.Exists(cloudPath))
-            return SetSyncFailure(local, OneDriveSyncStatus.Unavailable, null);
-
-        try
-        {
-            var merged = Merge(local, Read(cloudPath));
-            var changed = !Equivalent(local, merged);
-            WriteAtomic(DataFile, merged);
-            RememberCloudStamp(cloudPath);
-            OneDriveStatus = OneDriveSyncStatus.Synced;
+            OneDriveStatus = OneDriveSyncStatus.Pulled;
             LastOneDriveError = null;
             return new OneDriveSyncResult(merged, OneDriveStatus, changed);
         }
@@ -239,6 +214,26 @@ public sealed class DataStore
         return null;
     }
 
+    internal static bool IsAllowedRemoteUri(Uri uri)
+    {
+        if (uri.Scheme != Uri.UriSchemeHttps || !uri.IsDefaultPort) return false;
+        var host = uri.Host;
+        return host.Equals("1drv.ms", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("onedrive.live.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".onedrive.live.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("1drv.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".1drv.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("onedrive.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".onedrive.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("storage.live.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".storage.live.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".livefilestore.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("storage.msn.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".storage.msn.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("my.microsoftpersonalcontent.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".microsoftpersonalcontent.com", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static BlockedPlayer MergePlayer(IReadOnlyCollection<BlockedPlayer> versions)
     {
         var newest = versions.OrderByDescending(player => player.UpdatedAt).First();
@@ -257,7 +252,17 @@ public sealed class DataStore
     }
 
     private static AppData Read(string path) =>
-        JsonSerializer.Deserialize<AppData>(File.ReadAllText(path), JsonOptions) ?? new AppData();
+        ReadJson(File.ReadAllText(path));
+
+    private static AppData ReadJson(string json)
+    {
+        var data = JsonSerializer.Deserialize<AppData>(json, JsonOptions)
+                   ?? throw new InvalidDataException("Blacklist JSON is empty.");
+        data.Players ??= [];
+        data.DeletedPlayers ??= [];
+        foreach (var player in data.Players) player.Aliases ??= [];
+        return data;
+    }
 
     private static AppData Clone(AppData data) =>
         JsonSerializer.Deserialize<AppData>(JsonSerializer.Serialize(data, JsonOptions), JsonOptions) ?? new AppData();
@@ -286,12 +291,67 @@ public sealed class DataStore
             File.Delete(oldFile);
     }
 
-    private void RememberCloudStamp(string cloudPath)
+    private static async Task<string> FetchRemoteJsonAsync(Uri initialUri, CancellationToken cancellationToken)
     {
-        var info = new FileInfo(cloudPath);
-        _lastCloudWriteUtc = info.LastWriteTimeUtc;
-        _lastCloudLength = info.Length;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(15));
+        using var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+            CheckCertificateRevocationList = true
+        };
+        using var client = new HttpClient(handler);
+        var current = initialUri;
+
+        for (var redirect = 0; redirect <= 6; redirect++)
+        {
+            if (!IsAllowedRemoteUri(current))
+                throw new InvalidDataException("OneDrive redirected outside the allowed Microsoft domains.");
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, current);
+            request.Headers.UserAgent.ParseAdd("WarThunderUIDGuard/0.4.1");
+            using var response = await client.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                timeout.Token);
+
+            if (IsRedirect(response.StatusCode))
+            {
+                var location = response.Headers.Location
+                               ?? throw new HttpRequestException("OneDrive returned a redirect without a location.");
+                current = location.IsAbsoluteUri ? location : new Uri(current, location);
+                continue;
+            }
+
+            response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength is > MaxRemoteBytes)
+                throw new InvalidDataException("The remote blacklist is larger than 1 MB.");
+
+            await using var input = await response.Content.ReadAsStreamAsync(timeout.Token);
+            using var output = new MemoryStream();
+            var buffer = new byte[8192];
+            while (true)
+            {
+                var read = await input.ReadAsync(buffer, timeout.Token);
+                if (read == 0) break;
+                if (output.Length + read > MaxRemoteBytes)
+                    throw new InvalidDataException("The remote blacklist is larger than 1 MB.");
+                output.Write(buffer, 0, read);
+            }
+
+            return Encoding.UTF8.GetString(output.ToArray()).TrimStart('\uFEFF');
+        }
+
+        throw new HttpRequestException("OneDrive returned too many redirects.");
     }
+
+    private static bool IsRedirect(HttpStatusCode statusCode) => statusCode is
+        HttpStatusCode.MovedPermanently or
+        HttpStatusCode.Found or
+        HttpStatusCode.SeeOther or
+        HttpStatusCode.TemporaryRedirect or
+        HttpStatusCode.PermanentRedirect;
 
     private OneDriveSyncResult SetSyncFailure(AppData data, OneDriveSyncStatus status, Exception? error)
     {
@@ -304,7 +364,10 @@ public sealed class DataStore
 public enum OneDriveSyncStatus
 {
     Disabled,
-    Synced,
+    Ready,
+    Pulling,
+    Uploaded,
+    Pulled,
     Unavailable,
     Error
 }

@@ -45,7 +45,7 @@ internal static class SelfTest
             var fallbackResult = store.Save(fallbackData);
             Assert(File.Exists(store.DataFile), "local data is saved before OneDrive sync");
             Assert(Directory.GetFiles(store.BackupDirectory, "blacklist-*.json").Length == 1, "local backup is created");
-            Assert(fallbackResult.Status == OneDriveSyncStatus.Unavailable, "missing OneDrive falls back to local data");
+            Assert(fallbackResult.Status == OneDriveSyncStatus.Ready, "enabling manual sync does not upload automatically");
 
             var oneDriveRoot = Path.Combine(testDirectory, "OneDrive");
             Directory.CreateDirectory(oneDriveRoot);
@@ -55,10 +55,23 @@ internal static class SelfTest
                 OneDriveSyncEnabled = true,
                 Players = [new BlockedPlayer { Uid = "99", Aliases = ["CloudPlayer"], UpdatedAt = now }]
             };
-            Assert(uploader.Synchronize(uploadData).Status == OneDriveSyncStatus.Synced, "manual upload writes OneDrive data");
-            var receiver = new DataStore(Path.Combine(testDirectory, "receiver"), oneDriveRoot);
-            var pullResult = receiver.PullFromOneDrive(new AppData { OneDriveSyncEnabled = true });
-            Assert(pullResult.Data.Players.Single().Uid == "99", "manual pull loads OneDrive data");
+            Assert(uploader.UploadToOneDrive(uploadData).Status == OneDriveSyncStatus.Uploaded, "manual upload writes OneDrive data");
+            var remoteJson = File.ReadAllText(uploader.OneDriveDataFile!);
+            Uri? requestedUri = null;
+            var receiver = new DataStore(
+                Path.Combine(testDirectory, "receiver"),
+                "",
+                (uri, _) =>
+                {
+                    requestedUri = uri;
+                    return Task.FromResult(remoteJson);
+                });
+            var pullResult = receiver.PullFromOneDriveAsync(new AppData { OneDriveSyncEnabled = true })
+                .GetAwaiter().GetResult();
+            Assert(pullResult.Status == OneDriveSyncStatus.Pulled, "manual pull reports a remote download");
+            Assert(pullResult.Data.Players.Single().Uid == "99", "manual pull loads public OneDrive data");
+            Assert(requestedUri?.AbsoluteUri == DataStore.SharedBlacklistUrl,
+                "public OneDrive pull opens the configured read-only share link");
         }
         finally
         {
@@ -66,10 +79,16 @@ internal static class SelfTest
         }
         Assert(Localizer.TranslationSetsMatch(), "Chinese and English translation keys match");
         Assert(Localizer.HasTranslation("Status.ConnectionFailed"), "connection failure is translated");
-        Assert(Localizer.HasTranslation("OneDrive.Synced"), "OneDrive status is translated");
+        Assert(Localizer.HasTranslation("OneDrive.Pulled"), "OneDrive pull status is translated");
+        Assert(Localizer.HasTranslation("OneDrive.Uploaded"), "OneDrive upload status is translated");
         Assert(Localizer.HasTranslation("Button.UploadOneDrive"), "OneDrive upload button is translated");
         Assert(Localizer.HasTranslation("Button.PullOneDrive"), "OneDrive pull button is translated");
         Assert(Localizer.HasTranslation("Button.SyncNickname"), "nickname sync button is translated");
+        Assert(DataStore.IsAllowedRemoteUri(new Uri("https://1drv.ms/u/example")), "OneDrive short links are allowed");
+        Assert(DataStore.IsAllowedRemoteUri(new Uri("https://public.bl.files.1drv.com/file")), "OneDrive download hosts are allowed");
+        Assert(DataStore.IsAllowedRemoteUri(new Uri("https://storage.live.com/file")), "OneDrive storage hosts are allowed");
+        Assert(DataStore.IsAllowedRemoteUri(new Uri("https://my.microsoftpersonalcontent.com/file")), "OneDrive personal-content downloads are allowed");
+        Assert(!DataStore.IsAllowedRemoteUri(new Uri("https://example.com/file")), "non-Microsoft remote hosts are blocked");
         Assert(NicknameLookupForm.BuildLookupUri("28384455").Query == "?name=28384455", "official nickname lookup URL uses UID");
         Assert(NicknameLookupForm.IsAllowedNavigation(new Uri("https://warthunder.com/zh/community/searchplayers/?name=1")), "official website navigation is allowed");
         Assert(!NicknameLookupForm.IsAllowedNavigation(new Uri("https://example.com/")), "external website navigation is blocked");

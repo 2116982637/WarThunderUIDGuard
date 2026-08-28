@@ -1,4 +1,4 @@
-# War Thunder UID Guard v0.4.0 Safe
+# War Thunder UID Guard v0.4.1 Safe
 
 Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵称历史监听 War Thunder 的公开本地接口 `127.0.0.1:8111`。
 
@@ -8,7 +8,7 @@ Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵�
 - 每约 0.9 秒轮询 `/gamechat` 与 `/hudmsg`。
 - 首次连接超过 10 秒仍未成功时自动停止监控，并明确显示“连接失败”。
 - 支持简体中文和英文，可在运行时切换并记住语言选择；首次运行跟随 Windows 显示语言。
-- 可选 OneDrive 个人同步：使用 Windows 已登录的 OneDrive 文件夹同步黑名单，不需要公网 IP 或自建服务器。
+- 可选 OneDrive 手动同步：其他用户通过只读共享链接拉取，管理员通过 Windows 已登录的 OneDrive 文件夹上传。
 - 可对选中的 UID 打开可见的战争雷霆官网查询页；官网返回唯一昵称时自动追加到昵称历史，不需要第二次确认。
 - 始终保留 `%LOCALAPPDATA%\WarThunderUIDGuard\blacklist.json` 本地副本，并保存最近 10 个自动备份。
 - 黑名单昵称出现在聊天或 HUD 战斗事件时，通过 Windows 通知区域提醒并播放系统提示音。
@@ -28,13 +28,15 @@ War Thunder 的 8111 接口不会提供对局完整名单，也不会提供参�
 
 ## OneDrive 同步
 
-先在 Windows 中登录并正常运行 OneDrive，然后勾选程序顶部的“OneDrive 同步”。程序会自动使用：
+勾选程序顶部的“OneDrive 手动同步”只会启用两个按钮，不会自动上传或拉取。
+
+“拉取同步”从项目内置的只读 OneDrive 文件共享链接下载并合并黑名单。其他用户不需要登录管理员的 OneDrive；程序在独立的匿名 WebView2 环境中打开官方 OneDrive 页面并触发其“下载”操作，不会读取浏览器登录状态或账号密码。共享链接必须允许“任何人、无需登录、可查看”。
+
+管理员先在 Windows 中登录并正常运行 OneDrive。“管理员上传”会安全合并并写入：
 
 `OneDrive\WarThunderUIDGuard\blacklist.json`
 
-OneDrive 文件写入成功时显示绿色“文件已更新”，随后由 OneDrive 客户端负责上传；不可用或写入失败时继续使用本地数据。多台电脑合并时以 UID 为主键、保留昵称历史，并以更新时间较新的备注或删除操作为准。
-
-“上传本地”会立即安全合并并写入 OneDrive 文件；“拉取同步”会强制读取 OneDrive 文件并更新本地副本。两个按钮仅在启用 OneDrive 同步后可用。
+OneDrive 文件写入成功后由 OneDrive 客户端负责上传。其他用户的“管理员上传”不会修改管理员的共享文件，因为他们没有写权限。多台电脑合并时以 UID 为主键、保留昵称历史，并以更新时间较新的备注或删除操作为准。远程页面与下载仅允许 HTTPS 的 Microsoft OneDrive 域名，文件上限为 1 MB；JSON 验证失败时不会覆盖本地数据。拉取功能需要 Microsoft Edge WebView2 Runtime，Windows 10/11 通常已随 Edge 安装。
 
 ## 官网昵称同步
 

@@ -2,7 +2,7 @@ namespace WarThunderUIDGuard;
 
 public sealed class MainForm : Form
 {
-    private readonly DataStore _store = new();
+    private readonly DataStore _store;
     private readonly WarThunderClient _client = new();
     private AppData _data;
     private readonly DataGridView _grid = new();
@@ -15,7 +15,6 @@ public sealed class MainForm : Form
     private readonly Button _monitorButton = new();
     private readonly NotifyIcon _tray = new();
     private readonly System.Windows.Forms.Timer _connectionTimeoutTimer = new() { Interval = 10000 };
-    private readonly System.Windows.Forms.Timer _oneDriveSyncTimer = new() { Interval = 5000 };
     private readonly ComboBox _languageSelector = new();
     private readonly Label _languageLabel = new();
     private readonly CheckBox _oneDriveSync = new();
@@ -27,9 +26,11 @@ public sealed class MainForm : Form
     private string _statusPrefix = "○";
     private bool _initializingLanguage;
     private bool _initializingOneDrive;
+    private bool _oneDriveBusy;
 
     public MainForm()
     {
+        _store = new DataStore(remoteFetcher: OneDriveWebDownloader.FetchJsonAsync);
         MinimumSize = new Size(980, 660);
         Size = new Size(1080, 720);
         StartPosition = FormStartPosition.CenterScreen;
@@ -74,14 +75,10 @@ public sealed class MainForm : Form
         });
         _client.IdentityObserved += (uid, alias, source, detail) => Ui(() => HandleDetection(uid, alias, source, detail));
         _connectionTimeoutTimer.Tick += (_, _) => HandleConnectionTimeout();
-        _oneDriveSyncTimer.Tick += (_, _) => RefreshFromOneDrive();
-        _oneDriveSyncTimer.Start();
         FormClosed += (_, _) =>
         {
             _connectionTimeoutTimer.Stop();
             _connectionTimeoutTimer.Dispose();
-            _oneDriveSyncTimer.Stop();
-            _oneDriveSyncTimer.Dispose();
             _client.Dispose();
             _tray.Visible = false;
             _tray.Dispose();
@@ -207,7 +204,7 @@ public sealed class MainForm : Form
         ConfigureToolbarButton(_uploadOneDriveButton, "Button.UploadOneDrive", Color.FromArgb(33, 150, 83));
         _uploadOneDriveButton.Click += (_, _) => UploadToOneDrive();
         ConfigureToolbarButton(_pullOneDriveButton, "Button.PullOneDrive", Color.FromArgb(45, 108, 223));
-        _pullOneDriveButton.Click += (_, _) => PullFromOneDrive();
+        _pullOneDriveButton.Click += async (_, _) => await PullFromOneDriveAsync();
         ConfigureToolbarButton(_syncNicknameButton, "Button.SyncNickname", Color.FromArgb(29, 125, 140));
         _syncNicknameButton.Click += (_, _) => SyncSelectedNickname();
         toolbarButtons.Controls.AddRange([_syncNicknameButton, _uploadOneDriveButton, _pullOneDriveButton, simulate, remove]);
@@ -431,37 +428,38 @@ public sealed class MainForm : Form
     {
         if (_initializingOneDrive) return;
         _data.OneDriveSyncEnabled = _oneDriveSync.Checked;
-        var result = _oneDriveSync.Checked ? _store.Synchronize(_data) : _store.Save(_data);
+        var result = _store.Save(_data);
         _data = result.Data;
         RefreshGrid();
-        UpdateOneDriveSyncUi();
-    }
-
-    private void RefreshFromOneDrive()
-    {
-        if (!_data.OneDriveSyncEnabled) return;
-        var result = _store.RefreshFromOneDrive(_data);
-        _data = result.Data;
-        if (result.Changed) RefreshGrid();
         UpdateOneDriveSyncUi();
     }
 
     private void UploadToOneDrive()
     {
         if (!_data.OneDriveSyncEnabled) return;
-        var result = _store.Synchronize(_data);
+        var result = _store.UploadToOneDrive(_data);
         _data = result.Data;
         if (result.Changed) RefreshGrid();
         UpdateOneDriveSyncUi();
     }
 
-    private void PullFromOneDrive()
+    private async Task PullFromOneDriveAsync()
     {
-        if (!_data.OneDriveSyncEnabled) return;
-        var result = _store.PullFromOneDrive(_data);
-        _data = result.Data;
-        if (result.Changed) RefreshGrid();
-        UpdateOneDriveSyncUi();
+        if (!_data.OneDriveSyncEnabled || _oneDriveBusy) return;
+        _oneDriveBusy = true;
+        try
+        {
+            var pullTask = _store.PullFromOneDriveAsync(_data);
+            UpdateOneDriveSyncUi();
+            var result = await pullTask;
+            _data = result.Data;
+            if (result.Changed) RefreshGrid();
+        }
+        finally
+        {
+            _oneDriveBusy = false;
+            UpdateOneDriveSyncUi();
+        }
     }
 
     private void SyncSelectedNickname()
@@ -571,20 +569,24 @@ public sealed class MainForm : Form
         var status = _data.OneDriveSyncEnabled ? _store.OneDriveStatus : OneDriveSyncStatus.Disabled;
         _oneDriveSync.Text = Localizer.T(status switch
         {
-            OneDriveSyncStatus.Synced => "OneDrive.Synced",
+            OneDriveSyncStatus.Ready => "OneDrive.Ready",
+            OneDriveSyncStatus.Pulling => "OneDrive.Pulling",
+            OneDriveSyncStatus.Uploaded => "OneDrive.Uploaded",
+            OneDriveSyncStatus.Pulled => "OneDrive.Pulled",
             OneDriveSyncStatus.Unavailable => "OneDrive.Unavailable",
             OneDriveSyncStatus.Error => "OneDrive.Error",
             _ => "OneDrive.Disabled"
         });
         _oneDriveSync.ForeColor = status switch
         {
-            OneDriveSyncStatus.Synced => Color.SeaGreen,
+            OneDriveSyncStatus.Uploaded or OneDriveSyncStatus.Pulled => Color.SeaGreen,
+            OneDriveSyncStatus.Pulling => Color.FromArgb(45, 108, 223),
             OneDriveSyncStatus.Unavailable => Color.DarkOrange,
             OneDriveSyncStatus.Error => Color.Firebrick,
             _ => Color.DimGray
         };
-        _uploadOneDriveButton.Enabled = _data.OneDriveSyncEnabled;
-        _pullOneDriveButton.Enabled = _data.OneDriveSyncEnabled;
+        _uploadOneDriveButton.Enabled = _data.OneDriveSyncEnabled && !_oneDriveBusy && _store.OneDriveDataFile is not null;
+        _pullOneDriveButton.Enabled = _data.OneDriveSyncEnabled && !_oneDriveBusy;
         PositionHeaderControls();
     }
 
