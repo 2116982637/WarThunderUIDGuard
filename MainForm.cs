@@ -14,10 +14,11 @@ public sealed class MainForm : Form
     private readonly ListBox _log = new();
     private readonly Button _monitorButton = new();
     private readonly NotifyIcon _tray = new();
+    private readonly System.Windows.Forms.Timer _connectionTimeoutTimer = new() { Interval = 10000 };
 
     public MainForm()
     {
-        Text = "War Thunder UID Guard  v0.1.2 Safe";
+        Text = "War Thunder UID Guard  v0.1.3 Safe";
         MinimumSize = new Size(980, 660);
         Size = new Size(1080, 720);
         StartPosition = FormStartPosition.CenterScreen;
@@ -47,12 +48,16 @@ public sealed class MainForm : Form
         _client.PlayersProvider = () => _data.Players.ToList();
         _client.ConnectionChanged += (connected, text) => Ui(() =>
         {
+            if (connected) _connectionTimeoutTimer.Stop();
             _status.Text = connected ? "● " + text : "○ " + text;
             _status.ForeColor = connected ? Color.SeaGreen : Color.DarkOrange;
         });
         _client.IdentityObserved += (uid, alias, source, detail) => Ui(() => HandleDetection(uid, alias, source, detail));
+        _connectionTimeoutTimer.Tick += (_, _) => HandleConnectionTimeout();
         FormClosed += (_, _) =>
         {
+            _connectionTimeoutTimer.Stop();
+            _connectionTimeoutTimer.Dispose();
             _client.Dispose();
             _tray.Visible = false;
             _tray.Dispose();
@@ -220,16 +225,40 @@ public sealed class MainForm : Form
     {
         if (_client.IsRunning)
         {
+            _connectionTimeoutTimer.Stop();
             _client.Stop();
             _monitorButton.Text = "开始监控";
         }
         else
         {
             _client.Start();
+            _connectionTimeoutTimer.Stop();
+            _connectionTimeoutTimer.Start();
             _monitorButton.Text = "停止监控";
             _status.Text = "○ 正在连接…";
+            _status.ForeColor = Color.DarkOrange;
         }
     }
+
+    private void HandleConnectionTimeout()
+    {
+        _connectionTimeoutTimer.Stop();
+        if (!ShouldFailConnection(_client.IsRunning, _client.IsConnected)) return;
+
+        _client.Stop();
+        _monitorButton.Text = "开始监控";
+        _status.Text = "✕ 连接失败";
+        _status.ForeColor = Color.Firebrick;
+        System.Media.SystemSounds.Hand.Play();
+        MessageBox.Show(
+            "10 秒内未能连接 War Thunder 本地接口 127.0.0.1:8111。\n\n请确认游戏已启动并进入对局，然后重试。",
+            "连接失败",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Error);
+    }
+
+    internal static bool ShouldFailConnection(bool isRunning, bool isConnected) =>
+        isRunning && !isConnected;
 
     private void AddOrUpdate()
     {

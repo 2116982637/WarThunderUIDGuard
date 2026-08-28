@@ -11,13 +11,14 @@ public sealed class WarThunderClient : IDisposable
     private int _lastChatId = -1;
     private int _lastEventId = -1;
     private int _lastDamageId = -1;
-    private bool _connected;
+    private volatile bool _connected;
 
     public event Action<bool, string>? ConnectionChanged;
     public event Action<string, string, string, string>? IdentityObserved;
     public Func<IReadOnlyList<BlockedPlayer>> PlayersProvider { get; set; } = () => [];
 
     public bool IsRunning => _cts is not null;
+    public bool IsConnected => _connected;
 
     public void Start()
     {

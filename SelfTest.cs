@@ -15,6 +15,9 @@ internal static class SelfTest
         Assert(!WarThunderClient.IsAllowedEndpoint(new Uri("https://127.0.0.1:8111/gamechat")), "https variant is rejected");
         Assert(!WarThunderClient.IsAllowedEndpoint(new Uri("http://127.0.0.1:8112/gamechat")), "other port is rejected");
         Assert(!WarThunderClient.IsAllowedEndpoint(new Uri("http://example.com/gamechat")), "external host is rejected");
+        Assert(MainForm.ShouldFailConnection(true, false), "running disconnected client times out");
+        Assert(!MainForm.ShouldFailConnection(true, true), "connected client does not time out");
+        Assert(!MainForm.ShouldFailConnection(false, false), "stopped client does not time out");
         Console.WriteLine("SELF-TEST OK");
     }
 
