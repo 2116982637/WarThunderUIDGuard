@@ -157,6 +157,34 @@ public sealed class DataStore
         }
     }
 
+    public OneDriveSyncResult PullFromOneDrive(AppData local)
+    {
+        if (!local.OneDriveSyncEnabled)
+        {
+            OneDriveStatus = OneDriveSyncStatus.Disabled;
+            return new OneDriveSyncResult(local, OneDriveStatus, false);
+        }
+
+        var cloudPath = OneDriveDataFile;
+        if (cloudPath is null || !File.Exists(cloudPath))
+            return SetSyncFailure(local, OneDriveSyncStatus.Unavailable, null);
+
+        try
+        {
+            var merged = Merge(local, Read(cloudPath));
+            var changed = !Equivalent(local, merged);
+            WriteAtomic(DataFile, merged);
+            RememberCloudStamp(cloudPath);
+            OneDriveStatus = OneDriveSyncStatus.Synced;
+            LastOneDriveError = null;
+            return new OneDriveSyncResult(merged, OneDriveStatus, changed);
+        }
+        catch (Exception ex)
+        {
+            return SetSyncFailure(local, OneDriveSyncStatus.Error, ex);
+        }
+    }
+
     internal static AppData Merge(AppData local, AppData cloud)
     {
         var deletions = local.DeletedPlayers.Concat(cloud.DeletedPlayers)

@@ -19,6 +19,9 @@ public sealed class MainForm : Form
     private readonly ComboBox _languageSelector = new();
     private readonly Label _languageLabel = new();
     private readonly CheckBox _oneDriveSync = new();
+    private readonly Button _uploadOneDriveButton = new();
+    private readonly Button _pullOneDriveButton = new();
+    private readonly Button _syncNicknameButton = new();
     private readonly List<Detection> _detections = [];
     private string _statusKey = "Status.NotStarted";
     private string _statusPrefix = "○";
@@ -190,7 +193,7 @@ public sealed class MainForm : Form
         var toolbarButtons = new FlowLayoutPanel
         {
             Dock = DockStyle.Right,
-            Width = 210,
+            Width = 522,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             Padding = new Padding(0, 3, 0, 0)
@@ -201,7 +204,13 @@ public sealed class MainForm : Form
         var simulate = MakeButton("Button.TestAlert", Color.FromArgb(94, 80, 180));
         simulate.Size = new Size(96, 30);
         simulate.Click += (_, _) => Simulate();
-        toolbarButtons.Controls.AddRange([simulate, remove]);
+        ConfigureToolbarButton(_uploadOneDriveButton, "Button.UploadOneDrive", Color.FromArgb(33, 150, 83));
+        _uploadOneDriveButton.Click += (_, _) => UploadToOneDrive();
+        ConfigureToolbarButton(_pullOneDriveButton, "Button.PullOneDrive", Color.FromArgb(45, 108, 223));
+        _pullOneDriveButton.Click += (_, _) => PullFromOneDrive();
+        ConfigureToolbarButton(_syncNicknameButton, "Button.SyncNickname", Color.FromArgb(29, 125, 140));
+        _syncNicknameButton.Click += (_, _) => SyncSelectedNickname();
+        toolbarButtons.Controls.AddRange([_syncNicknameButton, _uploadOneDriveButton, _pullOneDriveButton, simulate, remove]);
         gridToolbar.Controls.Add(toolbarButtons);
         gridPanel.Controls.Add(gridToolbar, 0, 0);
 
@@ -251,6 +260,15 @@ public sealed class MainForm : Form
         ForeColor = Color.White,
         FlatStyle = FlatStyle.Flat
     };
+
+    private static void ConfigureToolbarButton(Button button, string textKey, Color color)
+    {
+        button.Tag = textKey;
+        button.BackColor = color;
+        button.ForeColor = Color.White;
+        button.FlatStyle = FlatStyle.Flat;
+        button.Size = new Size(96, 30);
+    }
 
     private void ToggleMonitor()
     {
@@ -428,6 +446,52 @@ public sealed class MainForm : Form
         UpdateOneDriveSyncUi();
     }
 
+    private void UploadToOneDrive()
+    {
+        if (!_data.OneDriveSyncEnabled) return;
+        var result = _store.Synchronize(_data);
+        _data = result.Data;
+        if (result.Changed) RefreshGrid();
+        UpdateOneDriveSyncUi();
+    }
+
+    private void PullFromOneDrive()
+    {
+        if (!_data.OneDriveSyncEnabled) return;
+        var result = _store.PullFromOneDrive(_data);
+        _data = result.Data;
+        if (result.Changed) RefreshGrid();
+        UpdateOneDriveSyncUi();
+    }
+
+    private void SyncSelectedNickname()
+    {
+        if (_grid.SelectedRows.Count == 0)
+        {
+            MessageBox.Show(
+                Localizer.T("Error.SelectPlayer"),
+                Localizer.T("Error.SelectPlayerTitle"),
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        var uid = _grid.SelectedRows[0].Cells[0].Value?.ToString();
+        var player = _data.Players.FirstOrDefault(item => item.Uid == uid);
+        if (player is null) return;
+
+        using var lookup = new NicknameLookupForm(player.Uid);
+        if (lookup.ShowDialog(this) != DialogResult.OK || string.IsNullOrWhiteSpace(lookup.Nickname)) return;
+
+        if (!player.Aliases.Contains(lookup.Nickname, StringComparer.OrdinalIgnoreCase))
+        {
+            player.Aliases.Add(lookup.Nickname);
+            player.UpdatedAt = DateTimeOffset.Now;
+            SaveData();
+            RefreshGrid();
+        }
+    }
+
     private void SaveData()
     {
         var result = _store.Save(_data);
@@ -519,6 +583,8 @@ public sealed class MainForm : Form
             OneDriveSyncStatus.Error => Color.Firebrick,
             _ => Color.DimGray
         };
+        _uploadOneDriveButton.Enabled = _data.OneDriveSyncEnabled;
+        _pullOneDriveButton.Enabled = _data.OneDriveSyncEnabled;
         PositionHeaderControls();
     }
 

@@ -1,4 +1,4 @@
-# War Thunder UID Guard v0.3.0 Safe
+# War Thunder UID Guard v0.4.0 Safe
 
 Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵称历史监听 War Thunder 的公开本地接口 `127.0.0.1:8111`。
 
@@ -9,6 +9,7 @@ Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵�
 - 首次连接超过 10 秒仍未成功时自动停止监控，并明确显示“连接失败”。
 - 支持简体中文和英文，可在运行时切换并记住语言选择；首次运行跟随 Windows 显示语言。
 - 可选 OneDrive 个人同步：使用 Windows 已登录的 OneDrive 文件夹同步黑名单，不需要公网 IP 或自建服务器。
+- 可对选中的 UID 打开可见的战争雷霆官网查询页；官网返回唯一昵称时自动追加到昵称历史，不需要第二次确认。
 - 始终保留 `%LOCALAPPDATA%\WarThunderUIDGuard\blacklist.json` 本地副本，并保存最近 10 个自动备份。
 - 黑名单昵称出现在聊天或 HUD 战斗事件时，通过 Windows 通知区域提醒并播放系统提示音。
 - OneDrive 同步关闭时，数据只保存在本机；同步失败时自动回退到本地副本。
@@ -32,6 +33,12 @@ War Thunder 的 8111 接口不会提供对局完整名单，也不会提供参�
 `OneDrive\WarThunderUIDGuard\blacklist.json`
 
 OneDrive 文件写入成功时显示绿色“文件已更新”，随后由 OneDrive 客户端负责上传；不可用或写入失败时继续使用本地数据。多台电脑合并时以 UID 为主键、保留昵称历史，并以更新时间较新的备注或删除操作为准。
+
+“上传本地”会立即安全合并并写入 OneDrive 文件；“拉取同步”会强制读取 OneDrive 文件并更新本地副本。两个按钮仅在启用 OneDrive 同步后可用。
+
+## 官网昵称同步
+
+在黑名单表格中选择一名玩家并点击“同步昵称”。程序使用 Microsoft Edge WebView2 打开 `warthunder.com` 官方查询页面并自动填入 UID。官网返回唯一结果时自动追加昵称；旧昵称不会删除。页面始终可见，程序不会绕过验证码或 Cloudflare 验证，查询失败时也不会修改本地数据。昵称同步需要 Microsoft Edge WebView2 Runtime；Windows 10/11 通常已随 Edge 安装。
 
 ## 构建
 

@@ -7,6 +7,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>WarThunderUIDGuard</AssemblyName>
     <RootNamespace>WarThunderUIDGuard</RootNamespace>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
+  </ItemGroup>
+
+  <!-- WebView2 references both desktop UI assemblies; this app only uses WinForms. -->
+  <Target Name="RemoveUnusedWebView2WpfReference" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)"
+                 Condition="'%(Reference.Filename)%(Reference.Extension)' == 'Microsoft.Web.WebView2.Wpf.dll'" />
+    </ItemGroup>
+  </Target>
 </Project>
