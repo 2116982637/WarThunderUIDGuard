@@ -249,12 +249,6 @@ public sealed class MainForm : Form
         _monitorButton.Text = "开始监控";
         _status.Text = "✕ 连接失败";
         _status.ForeColor = Color.Firebrick;
-        System.Media.SystemSounds.Hand.Play();
-        MessageBox.Show(
-            "10 秒内未能连接 War Thunder 本地接口 127.0.0.1:8111。\n\n请确认游戏已启动并进入对局，然后重试。",
-            "连接失败",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Error);
     }
 
     internal static bool ShouldFailConnection(bool isRunning, bool isConnected) =>
