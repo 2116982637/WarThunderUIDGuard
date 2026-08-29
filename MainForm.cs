@@ -21,6 +21,7 @@ public sealed class MainForm : Form
     private readonly Button _uploadOneDriveButton = new();
     private readonly Button _pullOneDriveButton = new();
     private readonly Button _syncNicknameButton = new();
+    private readonly Button _updateButton = new();
     private readonly List<Detection> _detections = [];
     private string _statusKey = "Status.NotStarted";
     private string _statusPrefix = "○";
@@ -28,6 +29,8 @@ public sealed class MainForm : Form
     private bool _initializingOneDrive;
     private bool _oneDriveBusy;
     private bool _nicknameSyncBusy;
+    private bool _updateBusy;
+    private bool _updateExitPending;
     private CancellationTokenSource? _nicknameSyncCancellation;
     private string? _nicknameSyncStatusKey;
     private object[] _nicknameSyncStatusArgs = [];
@@ -54,6 +57,8 @@ public sealed class MainForm : Form
         BuildUi();
         ApplyLocalization();
         RefreshGrid();
+        if (AutoUpdater.TakeInstallerFailure() is not null)
+            SetNicknameSyncStatus("Update.InstallFailed");
         if (loadError is not null)
             MessageBox.Show(
                 Localizer.F("Error.DataRecovery", loadError.BackupPath),
@@ -200,7 +205,7 @@ public sealed class MainForm : Form
         var toolbarButtons = new FlowLayoutPanel
         {
             Dock = DockStyle.Right,
-            Width = 522,
+            Width = 624,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             Padding = new Padding(0, 3, 0, 0)
@@ -217,7 +222,9 @@ public sealed class MainForm : Form
         _pullOneDriveButton.Click += async (_, _) => await PullFromOneDriveAsync();
         ConfigureToolbarButton(_syncNicknameButton, "Button.SyncNickname", Color.FromArgb(29, 125, 140));
         _syncNicknameButton.Click += async (_, _) => await SyncSelectedNicknameAsync();
-        toolbarButtons.Controls.AddRange([_syncNicknameButton, _uploadOneDriveButton, _pullOneDriveButton, simulate, remove]);
+        ConfigureToolbarButton(_updateButton, "Button.CheckUpdate", Color.FromArgb(100, 75, 160));
+        _updateButton.Click += async (_, _) => await UpdateApplicationAsync();
+        toolbarButtons.Controls.AddRange([_syncNicknameButton, _uploadOneDriveButton, _pullOneDriveButton, _updateButton, simulate, remove]);
         gridToolbar.Controls.Add(toolbarButtons);
         gridPanel.Controls.Add(gridToolbar, 0, 0);
 
@@ -571,6 +578,48 @@ public sealed class MainForm : Form
             {
                 _syncNicknameButton.Enabled = true;
                 _syncNicknameButton.Text = Localizer.T("Button.SyncNickname");
+            }
+        }
+    }
+
+    private async Task UpdateApplicationAsync()
+    {
+        if (_updateBusy) return;
+        _updateBusy = true;
+        _updateButton.Enabled = false;
+        _updateButton.Text = Localizer.T("Button.Updating");
+        SetNicknameSyncStatus("Update.Checking");
+        try
+        {
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(8));
+            var release = await AutoUpdater.CheckAsync(cancellation.Token);
+            if (release is null)
+            {
+                SetNicknameSyncStatus("Update.UpToDate");
+                return;
+            }
+
+            SetNicknameSyncStatus("Update.Downloading", release.Tag);
+            await AutoUpdater.PrepareAndLaunchAsync(release, Environment.ProcessId, cancellation.Token);
+            _updateExitPending = true;
+            SetNicknameSyncStatus("Update.Restarting", release.Tag);
+            Application.Exit();
+        }
+        catch (OperationCanceledException)
+        {
+            SetNicknameSyncStatus("Update.Failed");
+        }
+        catch
+        {
+            SetNicknameSyncStatus("Update.Failed");
+        }
+        finally
+        {
+            _updateBusy = false;
+            if (!_updateExitPending && !IsDisposed)
+            {
+                _updateButton.Enabled = true;
+                _updateButton.Text = Localizer.T("Button.CheckUpdate");
             }
         }
     }

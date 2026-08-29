@@ -18,6 +18,15 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--self-test-update", StringComparer.OrdinalIgnoreCase))
+        {
+            var release = AutoUpdater.CheckAsync(default).GetAwaiter().GetResult();
+            Console.WriteLine(release is null
+                ? $"UPDATE SELF-TEST OK (current {AutoUpdater.CurrentVersion} is not older than latest)"
+                : $"UPDATE SELF-TEST OK (new release {release.Tag})");
+            return;
+        }
+
         ApplicationConfiguration.Initialize();
         Application.Run(new MainForm());
     }

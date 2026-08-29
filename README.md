@@ -1,4 +1,4 @@
-# War Thunder UID Guard v0.4.4 Safe
+# War Thunder UID Guard v0.5.0 Safe
 
 Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵称历史监听 War Thunder 的公开本地接口 `127.0.0.1:8111`。
 
@@ -11,6 +11,7 @@ Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵�
 - 可选远程手动同步：其他用户优先从公开 GitHub 镜像匿名拉取，管理员仍可通过 Windows 已登录的 OneDrive 文件夹上传。
 - 其他用户可以通过“申请添加”生成一封发送到 `elainasamae@outlook.com` 的邮件草稿，由管理员审核 UID、昵称和备注。
 - 可在后台通过战争雷霆官网查询选中 UID 的当前昵称；官网返回唯一昵称时自动替换旧昵称，不弹出网页，也不需要第二次确认。
+- 内置应用更新：点击“检查更新”即可从本项目 GitHub Release 自动下载、校验、替换并重启，无需手动解压覆盖。
 - 始终保留 `%LOCALAPPDATA%\WarThunderUIDGuard\blacklist.json` 本地副本，并保存最近 10 个自动备份。
 - 黑名单昵称出现在聊天或 HUD 战斗事件时，通过 Windows 通知区域提醒并播放系统提示音。
 - OneDrive 同步关闭时，数据只保存在本机；同步失败时自动回退到本地副本。
@@ -46,6 +47,10 @@ OneDrive 文件写入成功后由 OneDrive 客户端负责上传；公开 GitHub
 ## 官网昵称同步
 
 在黑名单表格中选择一名玩家并点击“同步昵称”。程序使用屏幕外且不会抢焦点的 Microsoft Edge WebView2 访问 `warthunder.com` 官方查询页面并自动填入 UID，进度与结果只显示在主窗口。官网返回唯一结果时，会用当前昵称替换全部旧昵称。程序不会绕过验证码或 Cloudflare 验证，查询失败或超时时也不会修改本地数据。昵称同步需要 Microsoft Edge WebView2 Runtime；Windows 10/11 通常已随 Edge 安装。
+
+## 应用内更新
+
+点击“检查更新”后，程序只访问 `elainasamae/WarThunderUIDGuard` 的 GitHub 正式发布接口。发现新版本时会自动下载免安装 ZIP 和对应 SHA-256 文件，校验无误后退出、替换程序文件并自动重启；失败则保留或恢复当前版本。黑名单位于 `%LOCALAPPDATA%`，更新不会删除它。首次获得带有该功能的 v0.5.0 仍需手动下载一次，此后可以直接在程序内更新。
 
 ## 构建
 

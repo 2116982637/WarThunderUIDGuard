@@ -86,6 +86,8 @@ internal static class SelfTest
         Assert(Localizer.HasTranslation("Button.PullOneDrive"), "OneDrive pull button is translated");
         Assert(Localizer.HasTranslation("Button.SyncNickname"), "nickname sync button is translated");
         Assert(Localizer.HasTranslation("Button.RequestAdd"), "addition request button is translated");
+        Assert(Localizer.HasTranslation("Button.CheckUpdate"), "update button is translated");
+        Assert(Localizer.HasTranslation("Update.InstallFailed"), "update rollback status is translated");
         Assert(Localizer.HasTranslation("RequestAdd.Subject"), "addition request subject is translated");
         Assert(DataStore.IsAllowedRemoteUri(new Uri("https://1drv.ms/u/example")), "OneDrive short links are allowed");
         Assert(DataStore.IsAllowedRemoteUri(new Uri("https://public.bl.files.1drv.com/file")), "OneDrive download hosts are allowed");
@@ -117,6 +119,39 @@ internal static class SelfTest
         Assert(NicknameLookupService.BuildLookupUri("28384455").Query == "?name=28384455", "official nickname lookup URL uses UID");
         Assert(NicknameLookupService.IsAllowedNavigation(new Uri("https://warthunder.com/zh/community/searchplayers/?name=1")), "official website navigation is allowed");
         Assert(!NicknameLookupService.IsAllowedNavigation(new Uri("https://example.com/")), "external website navigation is blocked");
+        Assert(AutoUpdater.IsAllowedUpdateUri(AutoUpdater.LatestReleaseUri), "the exact GitHub release API is allowed");
+        Assert(AutoUpdater.IsAllowedUpdateUri(new Uri("https://github.com/elainasamae/WarThunderUIDGuard/releases/download/v1.2.3/file.zip")),
+            "official repository release assets are allowed");
+        Assert(!AutoUpdater.IsAllowedUpdateUri(new Uri("https://github.com/other/repository/releases/download/v1.2.3/file.zip")),
+            "other repository release assets are blocked");
+        Assert(!AutoUpdater.IsAllowedUpdateUri(new Uri("http://github.com/elainasamae/WarThunderUIDGuard/releases/download/v1.2.3/file.zip")),
+            "non-HTTPS update downloads are blocked");
+        const string releaseJson = """
+            {
+              "tag_name": "v1.2.3",
+              "draft": false,
+              "prerelease": false,
+              "assets": [
+                { "name": "WarThunderUIDGuard-v1.2.3-win-x64.zip", "browser_download_url": "https://github.com/elainasamae/WarThunderUIDGuard/releases/download/v1.2.3/WarThunderUIDGuard-v1.2.3-win-x64.zip" },
+                { "name": "WarThunderUIDGuard-v1.2.3-win-x64.zip.sha256.txt", "browser_download_url": "https://github.com/elainasamae/WarThunderUIDGuard/releases/download/v1.2.3/WarThunderUIDGuard-v1.2.3-win-x64.zip.sha256.txt" }
+              ]
+            }
+            """;
+        var parsedRelease = AutoUpdater.ParseReleaseJson(releaseJson, new Version(1, 0, 0));
+        Assert(parsedRelease?.Version == new Version(1, 2, 3), "newer GitHub releases are parsed");
+        Assert(AutoUpdater.ParseReleaseJson(releaseJson, new Version(1, 2, 3)) is null,
+            "the current release is not installed again");
+        Assert(AutoUpdater.ParseSha256(
+                $"{new string('A', 64)}  WarThunderUIDGuard-v1.2.3-win-x64.zip",
+                "WarThunderUIDGuard-v1.2.3-win-x64.zip") == new string('A', 64),
+            "published update checksums are parsed");
+        var archiveRoot = Path.Combine(Path.GetTempPath(), "WTUIDGuard-update-root");
+        Assert(AutoUpdater.ValidateArchiveEntryPath(archiveRoot, "WarThunderUIDGuard.exe") ==
+               Path.Combine(archiveRoot, "WarThunderUIDGuard.exe"), "safe archive paths remain inside staging");
+        var traversalBlocked = false;
+        try { AutoUpdater.ValidateArchiveEntryPath(archiveRoot, "../outside.exe"); }
+        catch (InvalidDataException) { traversalBlocked = true; }
+        Assert(traversalBlocked, "archive path traversal is blocked");
         var renamedPlayer = new BlockedPlayer { Uid = "7", Aliases = ["OldName", "OlderName"] };
         Assert(MainForm.ReplaceAliasesWithCurrentNickname(renamedPlayer, "NewName"),
             "nickname sync replaces old aliases");

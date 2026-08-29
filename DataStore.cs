@@ -325,7 +325,7 @@ public sealed class DataStore
                 throw new InvalidDataException("The remote source redirected outside the allowed domains.");
 
             using var request = new HttpRequestMessage(HttpMethod.Get, current);
-            request.Headers.UserAgent.ParseAdd("WarThunderUIDGuard/0.4.4");
+            request.Headers.UserAgent.ParseAdd($"WarThunderUIDGuard/{AutoUpdater.CurrentVersion}");
             request.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue
             {
                 NoCache = true
