@@ -17,6 +17,10 @@ public sealed class DataStore
         "https://raw.githubusercontent.com/elainasamae/WarThunderUIDGuard/main/data/blacklist.json";
     internal const string PublicBlacklistCdnUrl =
         "https://cdn.jsdelivr.net/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json";
+    internal const string PublicBlacklistGcoreUrl =
+        "https://gcore.jsdelivr.net/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json";
+    internal const string PublicBlacklistFastlyUrl =
+        "https://fastly.jsdelivr.net/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json";
     internal const string OneDriveSharedBlacklistUrl =
         "https://1drv.ms/u/c/e49649a6a25c7af6/IQB7KQ5tKejhRJNs9D7QYLLQAdxJ7B5Ie9V5pfH1k8-Djnc?e=XXH1dv";
     internal const int MaxRemoteBytes = 1024 * 1024;
@@ -48,6 +52,7 @@ public sealed class DataStore
     public string DataDirectory { get; }
 
     public string DataFile => Path.Combine(DataDirectory, "blacklist.json");
+    public string RemoteCacheFile => Path.Combine(DataDirectory, "remote-cache.json");
     public string BackupDirectory => Path.Combine(DataDirectory, "backups");
     public OneDriveSyncStatus OneDriveStatus { get; private set; } = OneDriveSyncStatus.Disabled;
     public string? LastOneDriveError { get; private set; }
@@ -149,7 +154,9 @@ public sealed class DataStore
         LastOneDriveError = null;
         try
         {
-            var cloud = ReadJson(await _remoteFetcher(sharedUri, cancellationToken));
+            var json = await _remoteFetcher(sharedUri, cancellationToken);
+            var cloud = ReadJson(json);
+            WriteTextAtomic(RemoteCacheFile, json);
             var merged = Merge(local, cloud);
             var changed = !Equivalent(local, merged);
             BackupLocalFile();
@@ -160,6 +167,24 @@ public sealed class DataStore
         }
         catch (Exception ex)
         {
+            try
+            {
+                if (File.Exists(RemoteCacheFile))
+                {
+                    var cloud = Read(RemoteCacheFile);
+                    var merged = Merge(local, cloud);
+                    var changed = !Equivalent(local, merged);
+                    BackupLocalFile();
+                    WriteAtomic(DataFile, merged);
+                    OneDriveStatus = OneDriveSyncStatus.Cached;
+                    LastOneDriveError = ex.Message;
+                    return new OneDriveSyncResult(merged, OneDriveStatus, changed);
+                }
+            }
+            catch
+            {
+                // An invalid cache must never replace valid local data.
+            }
             return SetSyncFailure(local, OneDriveSyncStatus.Error, ex);
         }
     }
@@ -227,10 +252,13 @@ public sealed class DataStore
                              path.Equals(
                                  "/elainasamae/WarThunderUIDGuard/main/data/blacklist.json",
                                  StringComparison.OrdinalIgnoreCase);
-        var isCdnMirror = host.Equals("cdn.jsdelivr.net", StringComparison.OrdinalIgnoreCase) &&
-                          path.Equals(
-                              "/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json",
-                              StringComparison.OrdinalIgnoreCase);
+        var isCdnMirror =
+            (host.Equals("cdn.jsdelivr.net", StringComparison.OrdinalIgnoreCase) ||
+             host.Equals("gcore.jsdelivr.net", StringComparison.OrdinalIgnoreCase) ||
+             host.Equals("fastly.jsdelivr.net", StringComparison.OrdinalIgnoreCase)) &&
+            path.Equals(
+                "/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json",
+                StringComparison.OrdinalIgnoreCase);
         return isGitHubMirror ||
                isCdnMirror ||
                host.Equals("1drv.ms", StringComparison.OrdinalIgnoreCase) ||
@@ -291,6 +319,15 @@ public sealed class DataStore
         Directory.CreateDirectory(directory);
         var temp = path + $".tmp-{Environment.ProcessId}";
         File.WriteAllText(temp, JsonSerializer.Serialize(data, JsonOptions));
+        File.Move(temp, path, true);
+    }
+
+    private static void WriteTextAtomic(string path, string text)
+    {
+        var directory = Path.GetDirectoryName(path) ?? throw new InvalidOperationException("Data path has no directory.");
+        Directory.CreateDirectory(directory);
+        var temp = path + $".tmp-{Environment.ProcessId}";
+        File.WriteAllText(temp, text, new UTF8Encoding(false));
         File.Move(temp, path, true);
     }
 
@@ -387,6 +424,7 @@ public enum OneDriveSyncStatus
     Pulling,
     Uploaded,
     Pulled,
+    Cached,
     Unavailable,
     Error
 }

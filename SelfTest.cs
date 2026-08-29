@@ -71,8 +71,16 @@ internal static class SelfTest
                 .GetAwaiter().GetResult();
             Assert(pullResult.Status == OneDriveSyncStatus.Pulled, "manual pull reports a remote download");
             Assert(pullResult.Data.Players.Single().Uid == "99", "manual pull loads public remote data");
+            Assert(File.Exists(receiver.RemoteCacheFile), "a successful remote pull creates an offline cache");
             Assert(requestedUri?.AbsoluteUri == DataStore.SharedBlacklistUrl,
                 "public pull opens the configured read-only mirror");
+            var cachedReceiver = new DataStore(
+                Path.Combine(testDirectory, "receiver"),
+                "",
+                (_, _) => Task.FromException<string>(new HttpRequestException("offline")));
+            var cachedResult = cachedReceiver.PullFromOneDriveAsync(pullResult.Data).GetAwaiter().GetResult();
+            Assert(cachedResult.Status == OneDriveSyncStatus.Cached,
+                "the last valid remote cache is used when every network source fails");
         }
         finally
         {
@@ -82,6 +90,7 @@ internal static class SelfTest
         Assert(Localizer.HasTranslation("Status.ConnectionFailed"), "connection failure is translated");
         Assert(Localizer.HasTranslation("OneDrive.Pulled"), "OneDrive pull status is translated");
         Assert(Localizer.HasTranslation("OneDrive.Uploaded"), "OneDrive upload status is translated");
+        Assert(Localizer.HasTranslation("OneDrive.Cached"), "offline cache status is translated");
         Assert(Localizer.HasTranslation("Button.UploadOneDrive"), "OneDrive upload button is translated");
         Assert(Localizer.HasTranslation("Button.PullOneDrive"), "OneDrive pull button is translated");
         Assert(Localizer.HasTranslation("Button.SyncNickname"), "nickname sync button is translated");
@@ -95,26 +104,28 @@ internal static class SelfTest
         Assert(DataStore.IsAllowedRemoteUri(new Uri("https://my.microsoftpersonalcontent.com/file")), "OneDrive personal-content downloads are allowed");
         Assert(DataStore.IsAllowedRemoteUri(new Uri(DataStore.SharedBlacklistUrl)), "the exact GitHub data mirror is allowed");
         Assert(DataStore.IsAllowedRemoteUri(new Uri(DataStore.PublicBlacklistCdnUrl)), "the exact CDN data mirror is allowed");
+        Assert(DataStore.IsAllowedRemoteUri(new Uri(DataStore.PublicBlacklistGcoreUrl)), "the exact Gcore data mirror is allowed");
+        Assert(DataStore.IsAllowedRemoteUri(new Uri(DataStore.PublicBlacklistFastlyUrl)), "the exact Fastly data mirror is allowed");
         Assert(!DataStore.IsAllowedRemoteUri(new Uri("https://raw.githubusercontent.com/other/repo/main/data/blacklist.json")),
             "unapproved GitHub data mirrors are blocked");
-        var remoteAttempts = new List<Uri>();
+        var remoteAttempts = new System.Collections.Concurrent.ConcurrentQueue<Uri>();
         var mirrorJson = """{"SchemaVersion":2,"Players":[],"DeletedPlayers":[]}""";
         var fallbackJson = PublicBlacklistDownloader.FetchJsonAsync(
                 new Uri(DataStore.SharedBlacklistUrl),
                 (uri, _) =>
                 {
-                    remoteAttempts.Add(uri);
+                    remoteAttempts.Enqueue(uri);
                     return uri.AbsoluteUri == DataStore.SharedBlacklistUrl
                         ? Task.FromException<string>(new HttpRequestException("primary unavailable"))
                         : Task.FromResult(mirrorJson);
                 },
-                (_, _) => Task.FromException<string>(new Exception("OneDrive should not be needed")),
                 default)
             .GetAwaiter().GetResult();
         Assert(fallbackJson == mirrorJson, "CDN fallback returns valid JSON");
-        Assert(remoteAttempts.Select(uri => uri.AbsoluteUri).SequenceEqual(
-                [DataStore.SharedBlacklistUrl, DataStore.PublicBlacklistCdnUrl]),
-            "public mirrors are attempted in the expected order");
+        Assert(remoteAttempts.Select(uri => uri.AbsoluteUri).Contains(DataStore.SharedBlacklistUrl),
+            "the fresh GitHub source is attempted");
+        Assert(remoteAttempts.Select(uri => uri.AbsoluteUri).Contains(DataStore.PublicBlacklistGcoreUrl),
+            "a fast independent CDN fallback is attempted");
         Assert(!DataStore.IsAllowedRemoteUri(new Uri("https://example.com/file")), "non-Microsoft remote hosts are blocked");
         Assert(NicknameLookupService.BuildLookupUri("28384455").Query == "?name=28384455", "official nickname lookup URL uses UID");
         Assert(NicknameLookupService.IsAllowedNavigation(new Uri("https://warthunder.com/zh/community/searchplayers/?name=1")), "official website navigation is allowed");

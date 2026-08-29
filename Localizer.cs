@@ -12,7 +12,7 @@ public static class Localizer
 {
     private static readonly IReadOnlyDictionary<string, string> Chinese = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.5.0 Safe",
+        ["App.Title"] = "War Thunder UID Guard  v0.5.1 Safe",
         ["Label.Language"] = "语言",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "昵称",
@@ -43,6 +43,7 @@ public static class Localizer
         ["OneDrive.Pulling"] = "正在拉取远程数据…",
         ["OneDrive.Uploaded"] = "管理员数据已上传",
         ["OneDrive.Pulled"] = "远程数据已拉取",
+        ["OneDrive.Cached"] = "远程线路暂不可用，已使用上次缓存",
         ["OneDrive.Unavailable"] = "同步源不可用",
         ["OneDrive.Error"] = "远程同步失败",
         ["Grid.Uid"] = "UID",
@@ -93,7 +94,7 @@ public static class Localizer
 
     private static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.5.0 Safe",
+        ["App.Title"] = "War Thunder UID Guard  v0.5.1 Safe",
         ["Label.Language"] = "Language",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "Nickname",
@@ -124,6 +125,7 @@ public static class Localizer
         ["OneDrive.Pulling"] = "Pulling remote data…",
         ["OneDrive.Uploaded"] = "Admin data uploaded",
         ["OneDrive.Pulled"] = "Remote data pulled",
+        ["OneDrive.Cached"] = "Remote sources unavailable; using the last cache",
         ["OneDrive.Unavailable"] = "Sync source unavailable",
         ["OneDrive.Error"] = "Remote sync failed",
         ["Grid.Uid"] = "UID",

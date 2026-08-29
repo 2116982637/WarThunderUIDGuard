@@ -742,6 +742,7 @@ public sealed class MainForm : Form
             OneDriveSyncStatus.Pulling => "OneDrive.Pulling",
             OneDriveSyncStatus.Uploaded => "OneDrive.Uploaded",
             OneDriveSyncStatus.Pulled => "OneDrive.Pulled",
+            OneDriveSyncStatus.Cached => "OneDrive.Cached",
             OneDriveSyncStatus.Unavailable => "OneDrive.Unavailable",
             OneDriveSyncStatus.Error => "OneDrive.Error",
             _ => "OneDrive.Disabled"
@@ -749,6 +750,7 @@ public sealed class MainForm : Form
         _oneDriveSync.ForeColor = status switch
         {
             OneDriveSyncStatus.Uploaded or OneDriveSyncStatus.Pulled => Color.SeaGreen,
+            OneDriveSyncStatus.Cached => Color.DarkOrange,
             OneDriveSyncStatus.Pulling => Color.FromArgb(45, 108, 223),
             OneDriveSyncStatus.Unavailable => Color.DarkOrange,
             OneDriveSyncStatus.Error => Color.Firebrick,
