@@ -157,7 +157,7 @@ public sealed class DataStore
             var json = await _remoteFetcher(sharedUri, cancellationToken);
             var cloud = ReadJson(json);
             WriteTextAtomic(RemoteCacheFile, json);
-            var merged = Merge(local, cloud);
+            var merged = MergeRemoteAuthoritative(local, cloud);
             var changed = !Equivalent(local, merged);
             BackupLocalFile();
             WriteAtomic(DataFile, merged);
@@ -172,7 +172,7 @@ public sealed class DataStore
                 if (File.Exists(RemoteCacheFile))
                 {
                     var cloud = Read(RemoteCacheFile);
-                    var merged = Merge(local, cloud);
+                    var merged = MergeRemoteAuthoritative(local, cloud);
                     var changed = !Equivalent(local, merged);
                     BackupLocalFile();
                     WriteAtomic(DataFile, merged);
@@ -221,6 +221,21 @@ public sealed class DataStore
                 .OrderByDescending(deletion => deletion.DeletedAt)
                 .ToList()
         };
+    }
+
+    internal static AppData MergeRemoteAuthoritative(AppData local, AppData cloud)
+    {
+        var remoteActiveUids = cloud.Players
+            .Where(player => !string.IsNullOrWhiteSpace(player.Uid))
+            .Select(player => player.Uid)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var localForPull = Clone(local);
+        localForPull.DeletedPlayers = localForPull.DeletedPlayers
+            .Where(deletion => !remoteActiveUids.Contains(deletion.Uid))
+            .ToList();
+
+        return Merge(localForPull, cloud);
     }
 
     internal static string? FindOneDriveRoot()

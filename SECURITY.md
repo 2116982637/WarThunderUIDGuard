@@ -1,6 +1,6 @@
 # 安全边界
 
-War Thunder UID Guard v0.6.2 对游戏采用“本地只读”设计。
+War Thunder UID Guard v0.6.3 对游戏采用“本地只读”设计。
 
 ## 强制限制
 

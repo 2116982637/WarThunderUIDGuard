@@ -37,6 +37,27 @@ internal static class SelfTest
         Assert(DataStore.Merge(localData, cloudData).Players.Count == 0, "newer OneDrive deletion is retained");
         localData.Players[0].UpdatedAt = now.AddMinutes(2);
         Assert(DataStore.Merge(localData, cloudData).Players.Count == 1, "newer re-add wins over an old deletion");
+        var locallyDeletedData = new AppData
+        {
+            Language = "zh-CN",
+            OneDriveSyncEnabled = true,
+            DeletedPlayers = [new DeletedPlayer { Uid = "42", DeletedAt = now.AddMinutes(3) }]
+        };
+        var remotelyActiveData = new AppData
+        {
+            Players = [new BlockedPlayer { Uid = "42", Aliases = ["ServerPlayer"], UpdatedAt = now }]
+        };
+        var serverAuthoritativeMerge = DataStore.MergeRemoteAuthoritative(locallyDeletedData, remotelyActiveData);
+        Assert(serverAuthoritativeMerge.Players.Single().Uid == "42",
+            "remote pull restores a server player hidden by a local deletion");
+        Assert(serverAuthoritativeMerge.DeletedPlayers.All(deletion => deletion.Uid != "42"),
+            "remote pull removes the conflicting local deletion marker");
+        var remotelyDeletedData = new AppData
+        {
+            DeletedPlayers = [new DeletedPlayer { Uid = "42", DeletedAt = now.AddMinutes(4) }]
+        };
+        Assert(DataStore.MergeRemoteAuthoritative(localData, remotelyDeletedData).Players.Count == 0,
+            "remote pull still honors a server deletion");
         var testDirectory = Path.Combine(Path.GetTempPath(), $"WTUIDGuard-selftest-{Guid.NewGuid():N}");
         try
         {
@@ -67,10 +88,16 @@ internal static class SelfTest
                     requestedUri = uri;
                     return Task.FromResult(remoteJson);
                 });
-            var pullResult = receiver.PullFromOneDriveAsync(new AppData { OneDriveSyncEnabled = true })
+            var pullResult = receiver.PullFromOneDriveAsync(new AppData
+                {
+                    OneDriveSyncEnabled = true,
+                    DeletedPlayers = [new DeletedPlayer { Uid = "99", DeletedAt = now.AddMinutes(5) }]
+                })
                 .GetAwaiter().GetResult();
             Assert(pullResult.Status == OneDriveSyncStatus.Pulled, "manual pull reports a remote download");
             Assert(pullResult.Data.Players.Single().Uid == "99", "manual pull loads public remote data");
+            Assert(pullResult.Data.DeletedPlayers.All(deletion => deletion.Uid != "99"),
+                "manual pull treats the server as authoritative over a local deletion");
             Assert(File.Exists(receiver.RemoteCacheFile), "a successful remote pull creates an offline cache");
             Assert(requestedUri?.AbsoluteUri == DataStore.SharedBlacklistUrl,
                 "public pull opens the configured read-only mirror");
