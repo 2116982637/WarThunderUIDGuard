@@ -208,6 +208,12 @@ internal static class SelfTest
             "signed server releases use the exact server archive path");
         Assert(signedRelease?.Sources[0].ExpectedSha256 == new string('B', 64),
             "signed server releases carry a trusted archive checksum");
+        Assert(signedRelease?.Sources.Count == 2 &&
+               signedRelease.Sources[1].ArchiveUri.AbsoluteUri ==
+               "https://github.com/elainasamae/WarThunderUIDGuard/releases/download/v1.2.3/WarThunderUIDGuard-v1.2.3-win-x64.zip",
+            "signed server releases retain GitHub only as the second download source");
+        Assert(signedRelease?.Sources[1].ExpectedSha256 == new string('B', 64),
+            "the GitHub fallback is bound to the server-signed checksum");
         Assert(AutoUpdater.ParseSignedReleaseJson(signedReleaseJson, new Version(1, 2, 3)) is null,
             "the current signed server release is not installed again");
         Assert(AutoUpdater.ParseSha256(

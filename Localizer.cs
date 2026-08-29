@@ -12,7 +12,7 @@ public static class Localizer
 {
     private static readonly IReadOnlyDictionary<string, string> Chinese = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.6.1 Safe",
+        ["App.Title"] = "War Thunder UID Guard  v0.6.2 Safe",
         ["Label.Language"] = "语言",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "昵称",
@@ -94,7 +94,7 @@ public static class Localizer
 
     private static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.6.1 Safe",
+        ["App.Title"] = "War Thunder UID Guard  v0.6.2 Safe",
         ["Label.Language"] = "Language",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "Nickname",

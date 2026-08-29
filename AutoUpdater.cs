@@ -44,18 +44,19 @@ internal static class AutoUpdater
     {
         var failures = new List<Exception>();
         UpdateRelease? serverRelease = null;
-        UpdateRelease? gitHubRelease = null;
         var serverReached = false;
-        var gitHubReached = false;
 
         try
         {
             serverRelease = await FetchSignedServerReleaseAsync(CurrentVersion, cancellationToken);
             serverReached = true;
+            if (serverRelease is not null) return serverRelease;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex) { failures.Add(ex); }
 
+        UpdateRelease? gitHubRelease = null;
+        var gitHubReached = false;
         try
         {
             gitHubRelease = await FetchGitHubReleaseAsync(CurrentVersion, cancellationToken);
@@ -66,18 +67,7 @@ internal static class AutoUpdater
 
         if (!serverReached && !gitHubReached)
             throw new AggregateException("All update metadata sources are unavailable.", failures);
-        if (serverRelease is null) return gitHubRelease;
-        if (gitHubRelease is null) return serverRelease;
-        if (serverRelease.Version > gitHubRelease.Version) return serverRelease;
-        if (gitHubRelease.Version > serverRelease.Version) return gitHubRelease;
-
-        return serverRelease with
-        {
-            Sources = serverRelease.Sources
-                .Concat(gitHubRelease.Sources)
-                .DistinctBy(source => source.ArchiveUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase)
-                .ToArray()
-        };
+        return gitHubRelease;
     }
 
     internal static async Task<UpdateRelease?> FetchSignedServerReleaseAsync(
@@ -284,11 +274,18 @@ internal static class AutoUpdater
         var archiveUri = new Uri(SignedBlacklistClient.UpdateBaseUrl + archiveName);
         if (!SignedBlacklistClient.IsUpdateArchiveUri(archiveUri))
             throw new InvalidDataException("The signed update archive URI is not allowed.");
+        var gitHubArchiveUri = new Uri(
+            $"https://github.com/{Repository}/releases/download/{tag}/{archiveName}");
+        if (!IsAllowedUpdateUri(gitHubArchiveUri))
+            throw new InvalidDataException("The GitHub fallback archive URI is not allowed.");
         return new UpdateRelease(
             version,
             tag,
             archiveName,
-            [new UpdateDownloadSource(archiveUri, null, expectedHash)]);
+            [
+                new UpdateDownloadSource(archiveUri, null, expectedHash),
+                new UpdateDownloadSource(gitHubArchiveUri, null, expectedHash)
+            ]);
     }
 
     internal static string ParseSha256(string text, string expectedFileName)
