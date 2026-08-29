@@ -6,4 +6,5 @@ obj/
 *.suo
 *.pdb
 *.zip
-
+artifacts/
+cloud/

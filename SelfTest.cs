@@ -84,14 +84,20 @@ internal static class SelfTest
         Assert(Localizer.HasTranslation("Button.UploadOneDrive"), "OneDrive upload button is translated");
         Assert(Localizer.HasTranslation("Button.PullOneDrive"), "OneDrive pull button is translated");
         Assert(Localizer.HasTranslation("Button.SyncNickname"), "nickname sync button is translated");
+        Assert(Localizer.HasTranslation("Button.RequestAdd"), "addition request button is translated");
+        Assert(Localizer.HasTranslation("RequestAdd.Subject"), "addition request subject is translated");
         Assert(DataStore.IsAllowedRemoteUri(new Uri("https://1drv.ms/u/example")), "OneDrive short links are allowed");
         Assert(DataStore.IsAllowedRemoteUri(new Uri("https://public.bl.files.1drv.com/file")), "OneDrive download hosts are allowed");
         Assert(DataStore.IsAllowedRemoteUri(new Uri("https://storage.live.com/file")), "OneDrive storage hosts are allowed");
         Assert(DataStore.IsAllowedRemoteUri(new Uri("https://my.microsoftpersonalcontent.com/file")), "OneDrive personal-content downloads are allowed");
         Assert(!DataStore.IsAllowedRemoteUri(new Uri("https://example.com/file")), "non-Microsoft remote hosts are blocked");
-        Assert(NicknameLookupForm.BuildLookupUri("28384455").Query == "?name=28384455", "official nickname lookup URL uses UID");
-        Assert(NicknameLookupForm.IsAllowedNavigation(new Uri("https://warthunder.com/zh/community/searchplayers/?name=1")), "official website navigation is allowed");
-        Assert(!NicknameLookupForm.IsAllowedNavigation(new Uri("https://example.com/")), "external website navigation is blocked");
+        Assert(NicknameLookupService.BuildLookupUri("28384455").Query == "?name=28384455", "official nickname lookup URL uses UID");
+        Assert(NicknameLookupService.IsAllowedNavigation(new Uri("https://warthunder.com/zh/community/searchplayers/?name=1")), "official website navigation is allowed");
+        Assert(!NicknameLookupService.IsAllowedNavigation(new Uri("https://example.com/")), "external website navigation is blocked");
+        var requestUri = MainForm.BuildAdditionRequestUri("28384455", "Player Name", "test note");
+        Assert(requestUri.Scheme == Uri.UriSchemeMailto, "addition request uses the local email client");
+        Assert(requestUri.AbsoluteUri.StartsWith("mailto:elainasamae@outlook.com", StringComparison.OrdinalIgnoreCase),
+            "addition request is addressed to the administrator");
         Assert(Localizer.Resolve("en") == AppLanguage.English, "saved English preference is restored");
         Assert(Localizer.Resolve("zh-CN") == AppLanguage.Chinese, "saved Chinese preference is restored");
         Localizer.Current = AppLanguage.English;

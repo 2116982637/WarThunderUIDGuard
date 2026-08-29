@@ -27,6 +27,10 @@ public sealed class MainForm : Form
     private bool _initializingLanguage;
     private bool _initializingOneDrive;
     private bool _oneDriveBusy;
+    private bool _nicknameSyncBusy;
+    private CancellationTokenSource? _nicknameSyncCancellation;
+    private string? _nicknameSyncStatusKey;
+    private object[] _nicknameSyncStatusArgs = [];
 
     public MainForm()
     {
@@ -77,6 +81,8 @@ public sealed class MainForm : Form
         _connectionTimeoutTimer.Tick += (_, _) => HandleConnectionTimeout();
         FormClosed += (_, _) =>
         {
+            _nicknameSyncCancellation?.Cancel();
+            _nicknameSyncCancellation?.Dispose();
             _connectionTimeoutTimer.Stop();
             _connectionTimeoutTimer.Dispose();
             _client.Dispose();
@@ -160,6 +166,11 @@ public sealed class MainForm : Form
         add.Margin = new Padding(8, 0, 0, 32);
         add.Click += (_, _) => AddOrUpdate();
         form.Controls.Add(add, 6, 0);
+        var requestAdd = MakeButton("Button.RequestAdd", Color.FromArgb(220, 126, 34));
+        requestAdd.Dock = DockStyle.Fill;
+        requestAdd.Margin = new Padding(8, 0, 0, 0);
+        requestAdd.Click += (_, _) => RequestAddition();
+        form.Controls.Add(requestAdd, 6, 1);
         var hint = new Label
         {
             Tag = "Hint.UidAliases",
@@ -206,7 +217,7 @@ public sealed class MainForm : Form
         ConfigureToolbarButton(_pullOneDriveButton, "Button.PullOneDrive", Color.FromArgb(45, 108, 223));
         _pullOneDriveButton.Click += async (_, _) => await PullFromOneDriveAsync();
         ConfigureToolbarButton(_syncNicknameButton, "Button.SyncNickname", Color.FromArgb(29, 125, 140));
-        _syncNicknameButton.Click += (_, _) => SyncSelectedNickname();
+        _syncNicknameButton.Click += async (_, _) => await SyncSelectedNicknameAsync();
         toolbarButtons.Controls.AddRange([_syncNicknameButton, _uploadOneDriveButton, _pullOneDriveButton, simulate, remove]);
         gridToolbar.Controls.Add(toolbarButtons);
         gridPanel.Controls.Add(gridToolbar, 0, 0);
@@ -412,7 +423,7 @@ public sealed class MainForm : Form
         _grid.Rows.Clear();
         foreach (var p in _data.Players.OrderByDescending(p => p.UpdatedAt))
             _grid.Rows.Add(p.Uid, p.AliasSummary, p.Note, p.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"));
-        _count.Text = Localizer.F("Count.Blacklist", _data.Players.Count);
+        RenderCount();
     }
 
     private void ChangeLanguage()
@@ -462,15 +473,49 @@ public sealed class MainForm : Form
         }
     }
 
-    private void SyncSelectedNickname()
+    private void RequestAddition()
     {
+        var uid = _uid.Text.Trim();
+        if (uid.Length < 3 || !uid.All(char.IsDigit))
+        {
+            SetNicknameSyncStatus("Error.InvalidUid");
+            return;
+        }
+
+        var requestUri = BuildAdditionRequestUri(uid, _aliases.Text.Trim(), _note.Text.Trim());
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = requestUri.AbsoluteUri,
+                UseShellExecute = true
+            });
+            SetNicknameSyncStatus("RequestAdd.Opened");
+        }
+        catch
+        {
+            SetNicknameSyncStatus("RequestAdd.NoMailClient");
+        }
+    }
+
+    internal static Uri BuildAdditionRequestUri(string uid, string aliases, string note)
+    {
+        var subject = Localizer.F("RequestAdd.Subject", uid);
+        var body = Localizer.F(
+            "RequestAdd.Body",
+            uid,
+            string.IsNullOrWhiteSpace(aliases) ? Localizer.T("Value.None") : aliases,
+            string.IsNullOrWhiteSpace(note) ? Localizer.T("Value.None") : note);
+        return new Uri(
+            $"mailto:elainasamae@outlook.com?subject={Uri.EscapeDataString(subject)}&body={Uri.EscapeDataString(body)}");
+    }
+
+    private async Task SyncSelectedNicknameAsync()
+    {
+        if (_nicknameSyncBusy) return;
         if (_grid.SelectedRows.Count == 0)
         {
-            MessageBox.Show(
-                Localizer.T("Error.SelectPlayer"),
-                Localizer.T("Error.SelectPlayerTitle"),
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            SetNicknameSyncStatus("Error.SelectPlayer");
             return;
         }
 
@@ -478,16 +523,81 @@ public sealed class MainForm : Form
         var player = _data.Players.FirstOrDefault(item => item.Uid == uid);
         if (player is null) return;
 
-        using var lookup = new NicknameLookupForm(player.Uid);
-        if (lookup.ShowDialog(this) != DialogResult.OK || string.IsNullOrWhiteSpace(lookup.Nickname)) return;
-
-        if (!player.Aliases.Contains(lookup.Nickname, StringComparer.OrdinalIgnoreCase))
+        _nicknameSyncBusy = true;
+        _syncNicknameButton.Enabled = false;
+        _syncNicknameButton.Text = Localizer.T("Button.SyncingNickname");
+        SetNicknameSyncStatus("NicknameSync.LookingUp", player.Uid);
+        using var cancellation = new CancellationTokenSource();
+        _nicknameSyncCancellation = cancellation;
+        try
         {
-            player.Aliases.Add(lookup.Nickname);
-            player.UpdatedAt = DateTimeOffset.Now;
-            SaveData();
-            RefreshGrid();
+            var result = await NicknameLookupService.LookupAsync(player.Uid, cancellation.Token);
+            switch (result.Status)
+            {
+                case NicknameLookupStatus.Found when !string.IsNullOrWhiteSpace(result.Nickname):
+                    if (!player.Aliases.Contains(result.Nickname, StringComparer.OrdinalIgnoreCase))
+                    {
+                        player.Aliases.Add(result.Nickname);
+                        player.UpdatedAt = DateTimeOffset.Now;
+                        SaveData();
+                        SetNicknameSyncStatus("NicknameSync.Found", result.Nickname);
+                    }
+                    else
+                    {
+                        SetNicknameSyncStatus("NicknameSync.Unchanged", result.Nickname);
+                    }
+                    RefreshGrid();
+                    break;
+                case NicknameLookupStatus.NotFound:
+                    SetNicknameSyncStatus("NicknameSync.NoResult");
+                    break;
+                case NicknameLookupStatus.MultipleResults:
+                    SetNicknameSyncStatus("NicknameSync.MultipleResults");
+                    break;
+                case NicknameLookupStatus.TimedOut:
+                    SetNicknameSyncStatus("NicknameSync.TimedOut");
+                    break;
+                default:
+                    SetNicknameSyncStatus("NicknameSync.WebViewUnavailable");
+                    break;
+            }
         }
+        catch (OperationCanceledException) when (IsDisposed || Disposing)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(_nicknameSyncCancellation, cancellation))
+                _nicknameSyncCancellation = null;
+            _nicknameSyncBusy = false;
+            if (!IsDisposed)
+            {
+                _syncNicknameButton.Enabled = true;
+                _syncNicknameButton.Text = Localizer.T("Button.SyncNickname");
+            }
+        }
+    }
+
+    private void SetNicknameSyncStatus(string key, params object[] values)
+    {
+        _nicknameSyncStatusKey = key;
+        _nicknameSyncStatusArgs = values;
+        RenderCount();
+    }
+
+    private void RenderCount()
+    {
+        var count = Localizer.F("Count.Blacklist", _data.Players.Count);
+        if (_nicknameSyncStatusKey is null)
+        {
+            _count.Text = count;
+            return;
+        }
+
+        var status = _nicknameSyncStatusArgs.Length == 0
+            ? Localizer.T(_nicknameSyncStatusKey)
+            : Localizer.F(_nicknameSyncStatusKey, _nicknameSyncStatusArgs);
+        _count.Text = $"{count}    ·    {status}";
     }
 
     private void SaveData()
