@@ -150,7 +150,15 @@ public sealed class MainForm : Form
         header.Controls.AddRange([_status, _monitorButton, _languageLabel, _languageSelector, _oneDriveSync]);
         root.Controls.Add(header, 0, 0);
 
-        var form = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 7, Padding = new Padding(0, 8, 0, 8) };
+        var form = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 7,
+            RowCount = 2,
+            Padding = new Padding(0, 8, 0, 8)
+        };
+        form.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        form.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         form.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42));
         form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
         form.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
@@ -163,23 +171,14 @@ public sealed class MainForm : Form
         AddField(form, "Label.Note", _note, 4);
         var add = MakeButton("Button.AddOrUpdate", Color.FromArgb(33, 150, 83));
         add.Dock = DockStyle.Fill;
-        add.Margin = new Padding(8, 0, 0, 32);
+        add.Margin = new Padding(8, 7, 0, 7);
         add.Click += (_, _) => AddOrUpdate();
         form.Controls.Add(add, 6, 0);
         var requestAdd = MakeButton("Button.RequestAdd", Color.FromArgb(220, 126, 34));
         requestAdd.Dock = DockStyle.Fill;
-        requestAdd.Margin = new Padding(8, 0, 0, 0);
+        requestAdd.Margin = new Padding(8, 7, 0, 7);
         requestAdd.Click += (_, _) => RequestAddition();
         form.Controls.Add(requestAdd, 6, 1);
-        var hint = new Label
-        {
-            Tag = "Hint.UidAliases",
-            ForeColor = Color.FromArgb(160, 88, 0),
-            AutoSize = true,
-            Dock = DockStyle.Fill
-        };
-        form.SetColumnSpan(hint, 6);
-        form.Controls.Add(hint, 0, 1);
         root.Controls.Add(form, 0, 1);
 
         var gridPanel = new TableLayoutPanel
@@ -256,8 +255,8 @@ public sealed class MainForm : Form
     private static void AddField(TableLayoutPanel panel, string textKey, Control control, int column)
     {
         panel.Controls.Add(new Label { Tag = textKey, AutoSize = true, Anchor = AnchorStyles.Left }, column, 0);
-        control.Dock = DockStyle.Fill;
-        control.Margin = new Padding(3, 0, 8, 32);
+        control.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        control.Margin = new Padding(3, 0, 8, 0);
         panel.Controls.Add(control, column + 1, 0);
     }
 
@@ -535,10 +534,8 @@ public sealed class MainForm : Form
             switch (result.Status)
             {
                 case NicknameLookupStatus.Found when !string.IsNullOrWhiteSpace(result.Nickname):
-                    if (!player.Aliases.Contains(result.Nickname, StringComparer.OrdinalIgnoreCase))
+                    if (ReplaceAliasesWithCurrentNickname(player, result.Nickname))
                     {
-                        player.Aliases.Add(result.Nickname);
-                        player.UpdatedAt = DateTimeOffset.Now;
                         SaveData();
                         SetNicknameSyncStatus("NicknameSync.Found", result.Nickname);
                     }
@@ -576,6 +573,19 @@ public sealed class MainForm : Form
                 _syncNicknameButton.Text = Localizer.T("Button.SyncNickname");
             }
         }
+    }
+
+    internal static bool ReplaceAliasesWithCurrentNickname(BlockedPlayer player, string nickname)
+    {
+        var currentNickname = nickname.Trim();
+        if (currentNickname.Length == 0) return false;
+        if (player.Aliases.Count == 1 &&
+            string.Equals(player.Aliases[0], currentNickname, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        player.Aliases = [currentNickname];
+        player.UpdatedAt = DateTimeOffset.Now;
+        return true;
     }
 
     private void SetNicknameSyncStatus(string key, params object[] values)

@@ -241,7 +241,7 @@ public sealed class DataStore
         {
             Uid = newest.Uid,
             Note = newest.Note,
-            Aliases = versions.SelectMany(player => player.Aliases)
+            Aliases = newest.Aliases
                 .Select(Matcher.Normalize)
                 .Where(alias => alias.Length > 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase)

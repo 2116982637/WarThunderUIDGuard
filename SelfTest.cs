@@ -31,7 +31,8 @@ internal static class SelfTest
         };
         var merged = DataStore.Merge(localData, cloudData);
         Assert(merged.Players.Single().Note == "new", "newest note wins during OneDrive merge");
-        Assert(merged.Players.Single().Aliases.Count == 2, "nickname histories are combined during OneDrive merge");
+        Assert(merged.Players.Single().Aliases.SequenceEqual(["Alpha"]),
+            "newest nickname list wins during OneDrive merge");
         cloudData.DeletedPlayers = [new DeletedPlayer { Uid = "42", DeletedAt = now.AddMinutes(1) }];
         Assert(DataStore.Merge(localData, cloudData).Players.Count == 0, "newer OneDrive deletion is retained");
         localData.Players[0].UpdatedAt = now.AddMinutes(2);
@@ -94,6 +95,13 @@ internal static class SelfTest
         Assert(NicknameLookupService.BuildLookupUri("28384455").Query == "?name=28384455", "official nickname lookup URL uses UID");
         Assert(NicknameLookupService.IsAllowedNavigation(new Uri("https://warthunder.com/zh/community/searchplayers/?name=1")), "official website navigation is allowed");
         Assert(!NicknameLookupService.IsAllowedNavigation(new Uri("https://example.com/")), "external website navigation is blocked");
+        var renamedPlayer = new BlockedPlayer { Uid = "7", Aliases = ["OldName", "OlderName"] };
+        Assert(MainForm.ReplaceAliasesWithCurrentNickname(renamedPlayer, "NewName"),
+            "nickname sync replaces old aliases");
+        Assert(renamedPlayer.Aliases.SequenceEqual(["NewName"]),
+            "nickname sync keeps only the current nickname");
+        Assert(!MainForm.ReplaceAliasesWithCurrentNickname(renamedPlayer, "newname"),
+            "same current nickname is unchanged");
         var requestUri = MainForm.BuildAdditionRequestUri("28384455", "Player Name", "test note");
         Assert(requestUri.Scheme == Uri.UriSchemeMailto, "addition request uses the local email client");
         Assert(requestUri.AbsoluteUri.StartsWith("mailto:elainasamae@outlook.com", StringComparison.OrdinalIgnoreCase),

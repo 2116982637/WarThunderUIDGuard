@@ -12,7 +12,7 @@ public static class Localizer
 {
     private static readonly IReadOnlyDictionary<string, string> Chinese = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.4.2 Safe",
+        ["App.Title"] = "War Thunder UID Guard  v0.4.3 Safe",
         ["Label.Language"] = "语言",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "昵称",
@@ -37,7 +37,6 @@ public static class Localizer
         ["OneDrive.Pulled"] = "远程数据已拉取",
         ["OneDrive.Unavailable"] = "同步源不可用",
         ["OneDrive.Error"] = "远程同步失败",
-        ["Hint.UidAliases"] = "UID 是永久主键；实时接口只返回昵称，因此至少填写一个当前昵称。对方改名后需补充新昵称。",
         ["Grid.Uid"] = "UID",
         ["Grid.AliasHistory"] = "昵称历史",
         ["Grid.Note"] = "备注",
@@ -86,7 +85,7 @@ public static class Localizer
 
     private static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.4.2 Safe",
+        ["App.Title"] = "War Thunder UID Guard  v0.4.3 Safe",
         ["Label.Language"] = "Language",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "Nickname",
@@ -111,7 +110,6 @@ public static class Localizer
         ["OneDrive.Pulled"] = "Remote data pulled",
         ["OneDrive.Unavailable"] = "Sync source unavailable",
         ["OneDrive.Error"] = "Remote sync failed",
-        ["Hint.UidAliases"] = "UID is the permanent key. The live API returns nicknames only, so add at least one current name and append new names after a rename.",
         ["Grid.Uid"] = "UID",
         ["Grid.AliasHistory"] = "Nickname history",
         ["Grid.Note"] = "Note",
