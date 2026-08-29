@@ -53,7 +53,13 @@ internal static class Program
         };
         Application.Run(testHost);
         if (error is not null) throw error;
-        _ = System.Text.Json.JsonDocument.Parse(json ?? throw new InvalidDataException("No JSON was downloaded."));
-        Console.WriteLine($"REMOTE SELF-TEST OK ({json.Length} characters)");
+        using var document = System.Text.Json.JsonDocument.Parse(
+            json ?? throw new InvalidDataException("No JSON was downloaded."));
+        if (!document.RootElement.TryGetProperty("Players", out var players) ||
+            players.ValueKind != System.Text.Json.JsonValueKind.Array ||
+            players.GetArrayLength() == 0)
+            throw new InvalidDataException("The public blacklist contains no players.");
+
+        Console.WriteLine($"REMOTE SELF-TEST OK ({players.GetArrayLength()} players, {json.Length} characters)");
     }
 }
