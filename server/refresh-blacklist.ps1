@@ -75,14 +75,24 @@ try {
     $checksumName = $archiveName + '.sha256.txt'
     $archiveAsset = $release.assets | Where-Object { $_.name -ceq $archiveName } | Select-Object -First 1
     $checksumAsset = $release.assets | Where-Object { $_.name -ceq $checksumName } | Select-Object -First 1
-    if ($null -eq $archiveAsset -or $null -eq $checksumAsset) { throw 'GitHub release assets are incomplete.' }
+    if ($null -eq $archiveAsset) { throw 'GitHub release archive is missing.' }
 
     $checksumPath = Join-Path $updates $checksumName
-    Get-RemoteFile -Urls @([string]$checksumAsset.browser_download_url) -Destination $checksumPath -MaximumBytes 16384
-    $checksumText = Get-Content -LiteralPath $checksumPath -Raw
-    $match = [regex]::Match($checksumText, '(?im)^\s*([0-9a-f]{64})\s+\*?WarThunderUIDGuard-v\d+\.\d+\.\d+-win-x64\.zip\s*$')
-    if (-not $match.Success) { throw 'GitHub release checksum is invalid.' }
-    $expectedHash = $match.Groups[1].Value.ToUpperInvariant()
+    $digestMatch = [regex]::Match([string]$archiveAsset.digest, '(?i)^sha256:([0-9a-f]{64})$')
+    if ($digestMatch.Success) {
+        $expectedHash = $digestMatch.Groups[1].Value.ToUpperInvariant()
+        Write-Utf8NoBom -Path $checksumPath -Text "$expectedHash  $archiveName"
+    }
+    elseif ($null -ne $checksumAsset) {
+        Get-RemoteFile -Urls @([string]$checksumAsset.browser_download_url) -Destination $checksumPath -MaximumBytes 16384
+        $checksumText = Get-Content -LiteralPath $checksumPath -Raw
+        $match = [regex]::Match($checksumText, '(?im)^\s*([0-9a-f]{64})\s+\*?WarThunderUIDGuard-v\d+\.\d+\.\d+-win-x64\.zip\s*$')
+        if (-not $match.Success) { throw 'GitHub release checksum is invalid.' }
+        $expectedHash = $match.Groups[1].Value.ToUpperInvariant()
+    }
+    else {
+        throw 'GitHub release checksum is unavailable.'
+    }
 
     $archivePath = Join-Path $updates $archiveName
     $archiveValid = (Test-Path -LiteralPath $archivePath) -and
@@ -94,6 +104,7 @@ try {
             throw 'Downloaded release archive checksum does not match.'
         }
     }
+    Remove-Item -LiteralPath ($archivePath + '.download') -Force -ErrorAction SilentlyContinue
 
     $metadata = [ordered]@{
         schemaVersion = 1
