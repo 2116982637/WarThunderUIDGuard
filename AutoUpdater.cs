@@ -11,8 +11,12 @@ internal sealed record UpdateRelease(
     Version Version,
     string Tag,
     string ArchiveName,
+    IReadOnlyList<UpdateDownloadSource> Sources);
+
+internal sealed record UpdateDownloadSource(
     Uri ArchiveUri,
-    Uri ChecksumUri);
+    Uri? ChecksumUri,
+    string? ExpectedSha256);
 
 internal static class AutoUpdater
 {
@@ -38,9 +42,59 @@ internal static class AutoUpdater
 
     public static async Task<UpdateRelease?> CheckAsync(CancellationToken cancellationToken)
     {
+        var failures = new List<Exception>();
+        UpdateRelease? serverRelease = null;
+        UpdateRelease? gitHubRelease = null;
+        var serverReached = false;
+        var gitHubReached = false;
+
+        try
+        {
+            serverRelease = await FetchSignedServerReleaseAsync(CurrentVersion, cancellationToken);
+            serverReached = true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex) { failures.Add(ex); }
+
+        try
+        {
+            gitHubRelease = await FetchGitHubReleaseAsync(CurrentVersion, cancellationToken);
+            gitHubReached = true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex) { failures.Add(ex); }
+
+        if (!serverReached && !gitHubReached)
+            throw new AggregateException("All update metadata sources are unavailable.", failures);
+        if (serverRelease is null) return gitHubRelease;
+        if (gitHubRelease is null) return serverRelease;
+        if (serverRelease.Version > gitHubRelease.Version) return serverRelease;
+        if (gitHubRelease.Version > serverRelease.Version) return gitHubRelease;
+
+        return serverRelease with
+        {
+            Sources = serverRelease.Sources
+                .Concat(gitHubRelease.Sources)
+                .DistinctBy(source => source.ArchiveUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+        };
+    }
+
+    internal static async Task<UpdateRelease?> FetchSignedServerReleaseAsync(
+        Version currentVersion,
+        CancellationToken cancellationToken)
+    {
+        var json = await SignedBlacklistClient.FetchAndVerifyUpdateMetadataAsync(cancellationToken);
+        return ParseSignedReleaseJson(json, currentVersion);
+    }
+
+    private static async Task<UpdateRelease?> FetchGitHubReleaseAsync(
+        Version currentVersion,
+        CancellationToken cancellationToken)
+    {
         var json = Encoding.UTF8.GetString(
             await DownloadBytesAsync(LatestReleaseUri, MetadataLimit, cancellationToken));
-        return ParseReleaseJson(json, CurrentVersion);
+        return ParseReleaseJson(json, currentVersion);
     }
 
     public static async Task PrepareAndLaunchAsync(
@@ -62,17 +116,48 @@ internal static class AutoUpdater
         Directory.CreateDirectory(stagingDirectory);
         try
         {
-            await DownloadFileAsync(release.ArchiveUri, archivePath, ArchiveLimit, cancellationToken);
-            var checksumText = Encoding.UTF8.GetString(
-                await DownloadBytesAsync(release.ChecksumUri, ChecksumLimit, cancellationToken));
-            await File.WriteAllTextAsync(checksumPath, checksumText, new UTF8Encoding(false), cancellationToken);
+            var failures = new List<Exception>();
+            var downloaded = false;
+            foreach (var source in release.Sources)
+            {
+                try
+                {
+                    TryDeleteFile(archivePath);
+                    TryDeleteFile(checksumPath);
+                    await DownloadFileAsync(source.ArchiveUri, archivePath, ArchiveLimit, cancellationToken);
+                    var checksumText = source.ExpectedSha256 is string expected
+                        ? $"{expected}  {release.ArchiveName}"
+                        : source.ChecksumUri is Uri checksumUri
+                            ? Encoding.UTF8.GetString(
+                                await DownloadBytesAsync(checksumUri, ChecksumLimit, cancellationToken))
+                            : throw new InvalidDataException("The update source has no trusted checksum.");
+                    await File.WriteAllTextAsync(
+                        checksumPath,
+                        checksumText,
+                        new UTF8Encoding(false),
+                        cancellationToken);
 
-            var expectedHash = ParseSha256(checksumText, release.ArchiveName);
-            var actualHash = await ComputeSha256Async(archivePath, cancellationToken);
-            if (!CryptographicOperations.FixedTimeEquals(
-                    Convert.FromHexString(expectedHash),
-                    Convert.FromHexString(actualHash)))
-                throw new InvalidDataException("The update archive checksum does not match the published checksum.");
+                    var expectedHash = ParseSha256(checksumText, release.ArchiveName);
+                    var actualHash = await ComputeSha256Async(archivePath, cancellationToken);
+                    if (!CryptographicOperations.FixedTimeEquals(
+                            Convert.FromHexString(expectedHash),
+                            Convert.FromHexString(actualHash)))
+                        throw new InvalidDataException(
+                            "The update archive checksum does not match the trusted checksum.");
+                    downloaded = true;
+                    break;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    failures.Add(ex);
+                    TryDeleteFile(archivePath);
+                    TryDeleteFile(checksumPath);
+                }
+            }
+
+            if (!downloaded)
+                throw new AggregateException("All update download sources are unavailable.", failures);
 
             ExtractArchiveSafely(archivePath, stagingDirectory);
             var executableName = Path.GetFileName(Environment.ProcessPath) ?? "WarThunderUIDGuard.exe";
@@ -162,7 +247,48 @@ internal static class AutoUpdater
 
         if (archiveUri is null || checksumUri is null)
             throw new InvalidDataException("The release is missing its portable archive or checksum.");
-        return new UpdateRelease(version, tag, archiveName, archiveUri, checksumUri);
+        return new UpdateRelease(
+            version,
+            tag,
+            archiveName,
+            [new UpdateDownloadSource(archiveUri, checksumUri, null)]);
+    }
+
+    internal static UpdateRelease? ParseSignedReleaseJson(string json, Version currentVersion)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (root.GetProperty("schemaVersion").GetInt32() != 1)
+            throw new InvalidDataException("The signed update metadata schema is unsupported.");
+
+        var tag = root.GetProperty("tag").GetString()?.Trim()
+            ?? throw new InvalidDataException("The signed update metadata has no tag.");
+        if (!tag.StartsWith('v') || !Version.TryParse(tag[1..], out var version) || version is null)
+            throw new InvalidDataException("The signed update tag is invalid.");
+        if (version <= currentVersion) return null;
+
+        var archiveName = root.GetProperty("archive").GetString()?.Trim()
+            ?? throw new InvalidDataException("The signed update metadata has no archive.");
+        var expectedArchiveName = $"WarThunderUIDGuard-{tag}-win-x64.zip";
+        if (!string.Equals(archiveName, expectedArchiveName, StringComparison.Ordinal))
+            throw new InvalidDataException("The signed update archive name is invalid.");
+
+        var expectedHash = root.GetProperty("sha256").GetString()?.Trim().ToUpperInvariant()
+            ?? throw new InvalidDataException("The signed update metadata has no checksum.");
+        if (expectedHash.Length != 64 || !expectedHash.All(Uri.IsHexDigit))
+            throw new InvalidDataException("The signed update checksum is invalid.");
+        var size = root.GetProperty("size").GetInt64();
+        if (size <= 0 || size > ArchiveLimit)
+            throw new InvalidDataException("The signed update archive size is invalid.");
+
+        var archiveUri = new Uri(SignedBlacklistClient.UpdateBaseUrl + archiveName);
+        if (!SignedBlacklistClient.IsUpdateArchiveUri(archiveUri))
+            throw new InvalidDataException("The signed update archive URI is not allowed.");
+        return new UpdateRelease(
+            version,
+            tag,
+            archiveName,
+            [new UpdateDownloadSource(archiveUri, null, expectedHash)]);
     }
 
     internal static string ParseSha256(string text, string expectedFileName)
@@ -183,6 +309,7 @@ internal static class AutoUpdater
 
     internal static bool IsAllowedUpdateUri(Uri uri)
     {
+        if (SignedBlacklistClient.IsUpdateArchiveUri(uri)) return true;
         if (uri.Scheme != Uri.UriSchemeHttps || !uri.IsDefaultPort ||
             !string.IsNullOrEmpty(uri.UserInfo))
             return false;
@@ -377,6 +504,12 @@ internal static class AutoUpdater
         {
             if (Directory.Exists(directory)) Directory.Delete(directory, true);
         }
+        catch { }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try { File.Delete(path); }
         catch { }
     }
 

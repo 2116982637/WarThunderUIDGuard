@@ -8,6 +8,9 @@ internal static class SignedBlacklistClient
 {
     internal const string DataUrl = "http://39.105.200.142:8443/blacklist.json";
     internal const string SignatureUrl = "http://39.105.200.142:8443/blacklist.sig";
+    internal const string UpdateMetadataUrl = "http://39.105.200.142:8443/updates/latest.json";
+    internal const string UpdateSignatureUrl = "http://39.105.200.142:8443/updates/latest.sig";
+    internal const string UpdateBaseUrl = "http://39.105.200.142:8443/updates/";
     internal const string PublicKeySha256 = "63E5E8CFD6D43224FC9452597ECA490754E3054AFBE9ECADCD53DF9B3DB063E9";
 
     private const int MaxSignatureBytes = 16 * 1024;
@@ -28,6 +31,55 @@ internal static class SignedBlacklistClient
         if (!IsDataUri(dataUri))
             throw new InvalidDataException("The signed blacklist URI is not allowed.");
 
+        return await FetchAndVerifyDocumentAsync(
+            dataUri,
+            new Uri(SignatureUrl),
+            DataStore.MaxRemoteBytes,
+            cancellationToken);
+    }
+
+    internal static async Task<string> FetchAndVerifyUpdateMetadataAsync(CancellationToken cancellationToken)
+    {
+        var metadataUri = new Uri(UpdateMetadataUrl);
+        var signatureUri = new Uri(UpdateSignatureUrl);
+        if (!IsUpdateMetadataUri(metadataUri) || !IsUpdateSignatureUri(signatureUri))
+            throw new InvalidDataException("The signed update metadata URI is not allowed.");
+
+        return await FetchAndVerifyDocumentAsync(
+            metadataUri,
+            signatureUri,
+            64 * 1024,
+            cancellationToken);
+    }
+
+    internal static bool IsUpdateMetadataUri(Uri uri) =>
+        IsExactServerUri(uri, "/updates/latest.json");
+
+    internal static bool IsUpdateSignatureUri(Uri uri) =>
+        IsExactServerUri(uri, "/updates/latest.sig");
+
+    internal static bool IsUpdateArchiveUri(Uri uri)
+    {
+        const string prefix = "WarThunderUIDGuard-v";
+        const string suffix = "-win-x64.zip";
+        if (!IsServerUri(uri) || !uri.AbsolutePath.StartsWith("/updates/", StringComparison.Ordinal))
+            return false;
+        var fileName = uri.AbsolutePath["/updates/".Length..];
+        if (!fileName.StartsWith(prefix, StringComparison.Ordinal) ||
+            !fileName.EndsWith(suffix, StringComparison.Ordinal) ||
+            fileName.Contains('/'))
+            return false;
+        var versionText = fileName[prefix.Length..^suffix.Length];
+        return Version.TryParse(versionText, out var version) && version is not null;
+    }
+
+    private static async Task<string> FetchAndVerifyDocumentAsync(
+        Uri dataUri,
+        Uri signatureUri,
+        int maximumBytes,
+        CancellationToken cancellationToken)
+    {
+
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(8));
         using var handler = new HttpClientHandler
@@ -36,8 +88,8 @@ internal static class SignedBlacklistClient
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
         };
         using var client = new HttpClient(handler);
-        var dataTask = FetchBytesAsync(client, dataUri, DataStore.MaxRemoteBytes, timeout.Token);
-        var signatureTask = FetchBytesAsync(client, new Uri(SignatureUrl), MaxSignatureBytes, timeout.Token);
+        var dataTask = FetchBytesAsync(client, dataUri, maximumBytes, timeout.Token);
+        var signatureTask = FetchBytesAsync(client, signatureUri, MaxSignatureBytes, timeout.Token);
         await Task.WhenAll(dataTask, signatureTask);
 
         var payload = await dataTask;
@@ -61,6 +113,17 @@ internal static class SignedBlacklistClient
 
     internal static string ComputePinnedPublicKeyHash() =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(PublicKeyXml)));
+
+    private static bool IsExactServerUri(Uri uri, string path) =>
+        IsServerUri(uri) && uri.AbsolutePath.Equals(path, StringComparison.Ordinal);
+
+    private static bool IsServerUri(Uri uri) =>
+        uri.Scheme == Uri.UriSchemeHttp &&
+        uri.Host.Equals("39.105.200.142", StringComparison.OrdinalIgnoreCase) &&
+        uri.Port == 8443 &&
+        string.IsNullOrEmpty(uri.Query) &&
+        string.IsNullOrEmpty(uri.Fragment) &&
+        string.IsNullOrEmpty(uri.UserInfo);
 
     private static async Task<byte[]> FetchBytesAsync(
         HttpClient client,

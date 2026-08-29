@@ -20,10 +20,13 @@ internal static class Program
 
         if (args.Contains("--self-test-update", StringComparer.OrdinalIgnoreCase))
         {
+            var serverRelease = AutoUpdater.FetchSignedServerReleaseAsync(new Version(0, 0, 0), default)
+                .GetAwaiter().GetResult()
+                ?? throw new InvalidDataException("The signed update server returned no release.");
             var release = AutoUpdater.CheckAsync(default).GetAwaiter().GetResult();
             Console.WriteLine(release is null
-                ? $"UPDATE SELF-TEST OK (current {AutoUpdater.CurrentVersion} is not older than latest)"
-                : $"UPDATE SELF-TEST OK (new release {release.Tag})");
+                ? $"UPDATE SELF-TEST OK (signed server {serverRelease.Tag} verified; current {AutoUpdater.CurrentVersion} is not older than latest)"
+                : $"UPDATE SELF-TEST OK (signed server {serverRelease.Tag} verified; new release {release.Tag})");
             return;
         }
 

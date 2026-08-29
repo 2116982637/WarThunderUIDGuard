@@ -114,6 +114,16 @@ internal static class SelfTest
             "other ports on the signed server are blocked");
         Assert(SignedBlacklistClient.ComputePinnedPublicKeyHash() == SignedBlacklistClient.PublicKeySha256,
             "the embedded signed-server public key matches its pinned hash");
+        Assert(SignedBlacklistClient.IsUpdateMetadataUri(new Uri(SignedBlacklistClient.UpdateMetadataUrl)),
+            "the exact signed update metadata endpoint is allowed");
+        Assert(SignedBlacklistClient.IsUpdateSignatureUri(new Uri(SignedBlacklistClient.UpdateSignatureUrl)),
+            "the exact signed update signature endpoint is allowed");
+        Assert(SignedBlacklistClient.IsUpdateArchiveUri(
+                new Uri("http://39.105.200.142:8443/updates/WarThunderUIDGuard-v1.2.3-win-x64.zip")),
+            "a versioned server update archive is allowed");
+        Assert(!SignedBlacklistClient.IsUpdateArchiveUri(
+                new Uri("http://39.105.200.142:8443/updates/other.zip")),
+            "unapproved files on the update server are blocked");
         using (var testRsa = System.Security.Cryptography.RSA.Create(2048))
         {
             var signedPayload = System.Text.Encoding.UTF8.GetBytes("signed blacklist test");
@@ -155,6 +165,12 @@ internal static class SelfTest
         Assert(NicknameLookupService.IsAllowedNavigation(new Uri("https://warthunder.com/zh/community/searchplayers/?name=1")), "official website navigation is allowed");
         Assert(!NicknameLookupService.IsAllowedNavigation(new Uri("https://example.com/")), "external website navigation is blocked");
         Assert(AutoUpdater.IsAllowedUpdateUri(AutoUpdater.LatestReleaseUri), "the exact GitHub release API is allowed");
+        Assert(AutoUpdater.IsAllowedUpdateUri(
+                new Uri("http://39.105.200.142:8443/updates/WarThunderUIDGuard-v1.2.3-win-x64.zip")),
+            "the exact signed-server update archive pattern is allowed");
+        Assert(!AutoUpdater.IsAllowedUpdateUri(
+                new Uri("http://39.105.200.142:8443/updates/WarThunderUIDGuard-v1.2.3-win-x64.zip.exe")),
+            "other server update extensions are blocked");
         Assert(AutoUpdater.IsAllowedUpdateUri(new Uri("https://github.com/elainasamae/WarThunderUIDGuard/releases/download/v1.2.3/file.zip")),
             "official repository release assets are allowed");
         Assert(!AutoUpdater.IsAllowedUpdateUri(new Uri("https://github.com/other/repository/releases/download/v1.2.3/file.zip")),
@@ -176,6 +192,24 @@ internal static class SelfTest
         Assert(parsedRelease?.Version == new Version(1, 2, 3), "newer GitHub releases are parsed");
         Assert(AutoUpdater.ParseReleaseJson(releaseJson, new Version(1, 2, 3)) is null,
             "the current release is not installed again");
+        var signedReleaseJson = $$"""
+            {
+              "schemaVersion": 1,
+              "tag": "v1.2.3",
+              "archive": "WarThunderUIDGuard-v1.2.3-win-x64.zip",
+              "sha256": "{{new string('B', 64)}}",
+              "size": 123456
+            }
+            """;
+        var signedRelease = AutoUpdater.ParseSignedReleaseJson(signedReleaseJson, new Version(1, 0, 0));
+        Assert(signedRelease?.Version == new Version(1, 2, 3), "newer signed server releases are parsed");
+        Assert(signedRelease?.Sources[0].ArchiveUri.AbsoluteUri ==
+               "http://39.105.200.142:8443/updates/WarThunderUIDGuard-v1.2.3-win-x64.zip",
+            "signed server releases use the exact server archive path");
+        Assert(signedRelease?.Sources[0].ExpectedSha256 == new string('B', 64),
+            "signed server releases carry a trusted archive checksum");
+        Assert(AutoUpdater.ParseSignedReleaseJson(signedReleaseJson, new Version(1, 2, 3)) is null,
+            "the current signed server release is not installed again");
         Assert(AutoUpdater.ParseSha256(
                 $"{new string('A', 64)}  WarThunderUIDGuard-v1.2.3-win-x64.zip",
                 "WarThunderUIDGuard-v1.2.3-win-x64.zip") == new string('A', 64),
