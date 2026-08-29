@@ -14,6 +14,10 @@ public sealed class DataStoreLoadException(string backupPath, Exception innerExc
 public sealed class DataStore
 {
     internal const string SharedBlacklistUrl =
+        "https://raw.githubusercontent.com/elainasamae/WarThunderUIDGuard/main/data/blacklist.json";
+    internal const string PublicBlacklistCdnUrl =
+        "https://cdn.jsdelivr.net/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json";
+    internal const string OneDriveSharedBlacklistUrl =
         "https://1drv.ms/u/c/e49649a6a25c7af6/IQB7KQ5tKejhRJNs9D7QYLLQAdxJ7B5Ie9V5pfH1k8-Djnc?e=XXH1dv";
     internal const int MaxRemoteBytes = 1024 * 1024;
 
@@ -218,7 +222,18 @@ public sealed class DataStore
     {
         if (uri.Scheme != Uri.UriSchemeHttps || !uri.IsDefaultPort) return false;
         var host = uri.Host;
-        return host.Equals("1drv.ms", StringComparison.OrdinalIgnoreCase) ||
+        var path = uri.AbsolutePath;
+        var isGitHubMirror = host.Equals("raw.githubusercontent.com", StringComparison.OrdinalIgnoreCase) &&
+                             path.Equals(
+                                 "/elainasamae/WarThunderUIDGuard/main/data/blacklist.json",
+                                 StringComparison.OrdinalIgnoreCase);
+        var isCdnMirror = host.Equals("cdn.jsdelivr.net", StringComparison.OrdinalIgnoreCase) &&
+                          path.Equals(
+                              "/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json",
+                              StringComparison.OrdinalIgnoreCase);
+        return isGitHubMirror ||
+               isCdnMirror ||
+               host.Equals("1drv.ms", StringComparison.OrdinalIgnoreCase) ||
                host.Equals("onedrive.live.com", StringComparison.OrdinalIgnoreCase) ||
                host.EndsWith(".onedrive.live.com", StringComparison.OrdinalIgnoreCase) ||
                host.Equals("1drv.com", StringComparison.OrdinalIgnoreCase) ||
@@ -291,7 +306,7 @@ public sealed class DataStore
             File.Delete(oldFile);
     }
 
-    private static async Task<string> FetchRemoteJsonAsync(Uri initialUri, CancellationToken cancellationToken)
+    internal static async Task<string> FetchRemoteJsonAsync(Uri initialUri, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
@@ -307,10 +322,14 @@ public sealed class DataStore
         for (var redirect = 0; redirect <= 6; redirect++)
         {
             if (!IsAllowedRemoteUri(current))
-                throw new InvalidDataException("OneDrive redirected outside the allowed Microsoft domains.");
+                throw new InvalidDataException("The remote source redirected outside the allowed domains.");
 
             using var request = new HttpRequestMessage(HttpMethod.Get, current);
-            request.Headers.UserAgent.ParseAdd("WarThunderUIDGuard/0.4.1");
+            request.Headers.UserAgent.ParseAdd("WarThunderUIDGuard/0.4.4");
+            request.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue
+            {
+                NoCache = true
+            };
             using var response = await client.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
@@ -319,7 +338,7 @@ public sealed class DataStore
             if (IsRedirect(response.StatusCode))
             {
                 var location = response.Headers.Location
-                               ?? throw new HttpRequestException("OneDrive returned a redirect without a location.");
+                               ?? throw new HttpRequestException("The remote source returned a redirect without a location.");
                 current = location.IsAbsoluteUri ? location : new Uri(current, location);
                 continue;
             }
@@ -343,7 +362,7 @@ public sealed class DataStore
             return Encoding.UTF8.GetString(output.ToArray()).TrimStart('\uFEFF');
         }
 
-        throw new HttpRequestException("OneDrive returned too many redirects.");
+        throw new HttpRequestException("The remote source returned too many redirects.");
     }
 
     private static bool IsRedirect(HttpStatusCode statusCode) => statusCode is

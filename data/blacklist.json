@@ -1,0 +1,52 @@
+{
+  "SchemaVersion": 2,
+  "Language": "zh-CN",
+  "OneDriveSyncEnabled": false,
+  "Players": [
+    {
+      "Uid": "176784760",
+      "Note": "",
+      "Aliases": [
+        "北条麻妃"
+      ],
+      "CreatedAt": "2026-08-29T14:20:55+08:00",
+      "UpdatedAt": "2026-08-29T14:30:58.9118707+08:00"
+    },
+    {
+      "Uid": "179656516",
+      "Note": "来源：Virream/WTBlackListsData 共享昵称表（非已审核黑名单）",
+      "Aliases": [
+        "Squirlykid14938"
+      ],
+      "CreatedAt": "2026-08-29T14:20:55+08:00",
+      "UpdatedAt": "2026-08-29T14:20:55+08:00"
+    },
+    {
+      "Uid": "28384455",
+      "Note": "",
+      "Aliases": [
+        "Manwhatcanisay"
+      ],
+      "CreatedAt": "2026-08-28T13:33:22.532294+08:00",
+      "UpdatedAt": "2026-08-28T13:33:22.5342773+08:00"
+    }
+  ],
+  "DeletedPlayers": [
+    {
+      "Uid": "123",
+      "DeletedAt": "2026-08-29T14:15:22.8625915+08:00"
+    },
+    {
+      "Uid": "111",
+      "DeletedAt": "2026-08-29T07:57:39.9130894+08:00"
+    },
+    {
+      "Uid": "1111",
+      "DeletedAt": "2026-08-28T21:07:11.600668+08:00"
+    },
+    {
+      "Uid": "111111",
+      "DeletedAt": "2026-08-28T21:06:30.7465882+08:00"
+    }
+  ]
+}

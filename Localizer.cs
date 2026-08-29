@@ -12,7 +12,7 @@ public static class Localizer
 {
     private static readonly IReadOnlyDictionary<string, string> Chinese = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.4.3 Safe",
+        ["App.Title"] = "War Thunder UID Guard  v0.4.4 Safe",
         ["Label.Language"] = "语言",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "昵称",
@@ -30,8 +30,8 @@ public static class Localizer
         ["Button.PullOneDrive"] = "拉取同步",
         ["Button.SyncNickname"] = "同步昵称",
         ["Button.SyncingNickname"] = "正在同步…",
-        ["OneDrive.Disabled"] = "OneDrive 手动同步",
-        ["OneDrive.Ready"] = "OneDrive 手动同步",
+        ["OneDrive.Disabled"] = "远程手动同步",
+        ["OneDrive.Ready"] = "远程手动同步",
         ["OneDrive.Pulling"] = "正在拉取远程数据…",
         ["OneDrive.Uploaded"] = "管理员数据已上传",
         ["OneDrive.Pulled"] = "远程数据已拉取",
@@ -85,7 +85,7 @@ public static class Localizer
 
     private static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.4.3 Safe",
+        ["App.Title"] = "War Thunder UID Guard  v0.4.4 Safe",
         ["Label.Language"] = "Language",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "Nickname",
@@ -103,8 +103,8 @@ public static class Localizer
         ["Button.PullOneDrive"] = "Pull sync",
         ["Button.SyncNickname"] = "Sync nickname",
         ["Button.SyncingNickname"] = "Syncing…",
-        ["OneDrive.Disabled"] = "OneDrive manual sync",
-        ["OneDrive.Ready"] = "OneDrive manual sync",
+        ["OneDrive.Disabled"] = "Manual remote sync",
+        ["OneDrive.Ready"] = "Manual remote sync",
         ["OneDrive.Pulling"] = "Pulling remote data…",
         ["OneDrive.Uploaded"] = "Admin data uploaded",
         ["OneDrive.Pulled"] = "Remote data pulled",

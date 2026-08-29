@@ -11,9 +11,10 @@ internal static class Program
             return;
         }
 
-        if (args.Contains("--self-test-onedrive", StringComparer.OrdinalIgnoreCase))
+        if (args.Contains("--self-test-remote", StringComparer.OrdinalIgnoreCase) ||
+            args.Contains("--self-test-onedrive", StringComparer.OrdinalIgnoreCase))
         {
-            RunOneDriveSelfTest();
+            RunRemoteSelfTest();
             return;
         }
 
@@ -21,7 +22,7 @@ internal static class Program
         Application.Run(new MainForm());
     }
 
-    private static void RunOneDriveSelfTest()
+    private static void RunRemoteSelfTest()
     {
         ApplicationConfiguration.Initialize();
         string? json = null;
@@ -39,7 +40,7 @@ internal static class Program
         {
             try
             {
-                json = await OneDriveWebDownloader.FetchJsonAsync(new Uri(DataStore.SharedBlacklistUrl), default);
+                json = await PublicBlacklistDownloader.FetchJsonAsync(new Uri(DataStore.SharedBlacklistUrl), default);
             }
             catch (Exception ex)
             {
@@ -53,6 +54,6 @@ internal static class Program
         Application.Run(testHost);
         if (error is not null) throw error;
         _ = System.Text.Json.JsonDocument.Parse(json ?? throw new InvalidDataException("No JSON was downloaded."));
-        Console.WriteLine($"ONEDRIVE SELF-TEST OK ({json.Length} characters)");
+        Console.WriteLine($"REMOTE SELF-TEST OK ({json.Length} characters)");
     }
 }

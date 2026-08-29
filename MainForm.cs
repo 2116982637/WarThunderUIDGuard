@@ -34,7 +34,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        _store = new DataStore(remoteFetcher: OneDriveWebDownloader.FetchJsonAsync);
+        _store = new DataStore(remoteFetcher: PublicBlacklistDownloader.FetchJsonAsync);
         MinimumSize = new Size(980, 660);
         Size = new Size(1080, 720);
         StartPosition = FormStartPosition.CenterScreen;
