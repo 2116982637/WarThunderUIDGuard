@@ -1,4 +1,4 @@
-# War Thunder UID Guard v0.5.1 Safe
+# War Thunder UID Guard v0.6.0 Safe
 
 Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵称历史监听 War Thunder 的公开本地接口 `127.0.0.1:8111`。
 
@@ -8,7 +8,7 @@ Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵�
 - 每约 0.9 秒轮询 `/gamechat` 与 `/hudmsg`。
 - 首次连接超过 10 秒仍未成功时自动停止监控，并明确显示“连接失败”。
 - 支持简体中文和英文，可在运行时切换并记住语言选择；首次运行跟随 Windows 显示语言。
-- 可选远程手动同步：其他用户优先从公开 GitHub 镜像匿名拉取，管理员仍可通过 Windows 已登录的 OneDrive 文件夹上传。
+- 可选远程手动同步：其他用户优先从专用只读同步服务器拉取经过 RSA-3072 数字签名的数据，管理员仍可通过 Windows 已登录的 OneDrive 文件夹上传。
 - 其他用户可以通过“申请添加”生成一封发送到 `elainasamae@outlook.com` 的邮件草稿，由管理员审核 UID、昵称和备注。
 - 可在后台通过战争雷霆官网查询选中 UID 的当前昵称；官网返回唯一昵称时自动替换旧昵称，不弹出网页，也不需要第二次确认。
 - 内置应用更新：点击“检查更新”即可从本项目 GitHub Release 自动下载、校验、替换并重启，无需手动解压覆盖。
@@ -32,13 +32,13 @@ War Thunder 的 8111 接口不会提供对局完整名单，也不会提供参�
 
 勾选程序顶部的“远程手动同步”只会启用两个按钮，不会自动上传或拉取。
 
-“拉取同步”会并发尝试 GitHub Raw、Gcore、Fastly 和 jsDelivr 四条只读线路，每条线路自动重试，任意一条成功就立即继续；全部网络线路暂时不可用时使用上次成功下载的本地缓存。所有公开线路都不需要登录、浏览器账户或 WebView2，避免单一 CDN、OneDrive 共享权限或页面结构导致拉取失败。
+“拉取同步”会优先尝试专用只读服务器 `http://39.105.200.142:8443/blacklist.json`，客户端必须使用内置 RSA-3072 公钥验证配套签名，验签失败的数据一律拒绝。随后并发尝试 GitHub Raw、Gcore、Fastly 和 jsDelivr 四条 HTTPS 后备线路，每条线路自动重试，任意一条成功就立即继续；全部网络线路暂时不可用时使用上次成功下载的本地缓存。专用服务器每 5 分钟从项目公开数据源刷新并重新签名，不需要登录、浏览器账户或 WebView2。
 
 管理员先在 Windows 中登录并正常运行 OneDrive。“管理员上传”会安全合并并写入：
 
 `OneDrive\WarThunderUIDGuard\blacklist.json`
 
-OneDrive 文件写入成功后由 OneDrive 客户端负责上传；公开 GitHub 镜像作为面向其他用户的稳定只读副本，随版本发布或数据更新提交同步。多台电脑合并时以 UID 为主键，以更新时间较新的昵称列表、备注或删除操作为准，不会把旧昵称重新合并回来。程序只允许 HTTPS 的精确 GitHub/CDN 镜像路径和 Microsoft OneDrive 域名，文件上限为 1 MB；JSON 验证失败时不会覆盖本地数据。远程拉取本身不需要 Microsoft Edge WebView2 Runtime。
+OneDrive 文件写入成功后由 OneDrive 客户端负责上传；公开 GitHub 镜像仍作为后备只读副本，随版本发布或数据更新提交同步。多台电脑合并时以 UID 为主键，以更新时间较新的昵称列表、备注或删除操作为准，不会把旧昵称重新合并回来。程序仅允许精确的签名服务器地址、GitHub/CDN 镜像路径和 Microsoft OneDrive 域名，文件上限为 1 MB；签名或 JSON 验证失败时不会覆盖本地数据。远程拉取本身不需要 Microsoft Edge WebView2 Runtime。
 
 ## 申请添加
 

@@ -106,6 +106,27 @@ internal static class SelfTest
         Assert(DataStore.IsAllowedRemoteUri(new Uri(DataStore.PublicBlacklistCdnUrl)), "the exact CDN data mirror is allowed");
         Assert(DataStore.IsAllowedRemoteUri(new Uri(DataStore.PublicBlacklistGcoreUrl)), "the exact Gcore data mirror is allowed");
         Assert(DataStore.IsAllowedRemoteUri(new Uri(DataStore.PublicBlacklistFastlyUrl)), "the exact Fastly data mirror is allowed");
+        Assert(SignedBlacklistClient.IsDataUri(new Uri(SignedBlacklistClient.DataUrl)),
+            "the exact signed server data endpoint is allowed");
+        Assert(!SignedBlacklistClient.IsDataUri(new Uri("http://39.105.200.142:8443/other.json")),
+            "other paths on the signed server are blocked");
+        Assert(!SignedBlacklistClient.IsDataUri(new Uri("http://39.105.200.142:8080/blacklist.json")),
+            "other ports on the signed server are blocked");
+        Assert(SignedBlacklistClient.ComputePinnedPublicKeyHash() == SignedBlacklistClient.PublicKeySha256,
+            "the embedded signed-server public key matches its pinned hash");
+        using (var testRsa = System.Security.Cryptography.RSA.Create(2048))
+        {
+            var signedPayload = System.Text.Encoding.UTF8.GetBytes("signed blacklist test");
+            var signature = testRsa.SignData(
+                signedPayload,
+                System.Security.Cryptography.HashAlgorithmName.SHA256,
+                System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+            Assert(SignedBlacklistClient.VerifySignature(signedPayload, signature, testRsa.ToXmlString(false)),
+                "a valid RSA blacklist signature is accepted");
+            signedPayload[0] ^= 1;
+            Assert(!SignedBlacklistClient.VerifySignature(signedPayload, signature, testRsa.ToXmlString(false)),
+                "tampered blacklist data is rejected");
+        }
         Assert(!DataStore.IsAllowedRemoteUri(new Uri("https://raw.githubusercontent.com/other/repo/main/data/blacklist.json")),
             "unapproved GitHub data mirrors are blocked");
         var remoteAttempts = new System.Collections.Concurrent.ConcurrentQueue<Uri>();
@@ -115,7 +136,8 @@ internal static class SelfTest
                 (uri, _) =>
                 {
                     remoteAttempts.Enqueue(uri);
-                    return uri.AbsoluteUri == DataStore.SharedBlacklistUrl
+                    return uri.AbsoluteUri == DataStore.SharedBlacklistUrl ||
+                           uri.AbsoluteUri == SignedBlacklistClient.DataUrl
                         ? Task.FromException<string>(new HttpRequestException("primary unavailable"))
                         : Task.FromResult(mirrorJson);
                 },
@@ -124,6 +146,8 @@ internal static class SelfTest
         Assert(fallbackJson == mirrorJson, "CDN fallback returns valid JSON");
         Assert(remoteAttempts.Select(uri => uri.AbsoluteUri).Contains(DataStore.SharedBlacklistUrl),
             "the fresh GitHub source is attempted");
+        Assert(remoteAttempts.Select(uri => uri.AbsoluteUri).Contains(SignedBlacklistClient.DataUrl),
+            "the signed server source is attempted first");
         Assert(remoteAttempts.Select(uri => uri.AbsoluteUri).Contains(DataStore.PublicBlacklistGcoreUrl),
             "a fast independent CDN fallback is attempted");
         Assert(!DataStore.IsAllowedRemoteUri(new Uri("https://example.com/file")), "non-Microsoft remote hosts are blocked");

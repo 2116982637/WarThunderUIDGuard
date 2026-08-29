@@ -8,7 +8,7 @@ internal static class PublicBlacklistDownloader
     {
         return await FetchJsonAsync(
             primaryUri,
-            DataStore.FetchRemoteJsonAsync,
+            FetchProductionSourceAsync,
             cancellationToken);
     }
 
@@ -20,10 +20,11 @@ internal static class PublicBlacklistDownloader
         var failures = new List<Exception>();
         var httpSources = new (Uri Uri, TimeSpan StartDelay)[]
         {
-            (primaryUri, TimeSpan.Zero),
-            (new Uri(DataStore.PublicBlacklistGcoreUrl), TimeSpan.FromMilliseconds(150)),
-            (new Uri(DataStore.PublicBlacklistFastlyUrl), TimeSpan.FromMilliseconds(300)),
-            (new Uri(DataStore.PublicBlacklistCdnUrl), TimeSpan.FromMilliseconds(450))
+            (new Uri(SignedBlacklistClient.DataUrl), TimeSpan.Zero),
+            (primaryUri, TimeSpan.FromMilliseconds(150)),
+            (new Uri(DataStore.PublicBlacklistGcoreUrl), TimeSpan.FromMilliseconds(300)),
+            (new Uri(DataStore.PublicBlacklistFastlyUrl), TimeSpan.FromMilliseconds(450)),
+            (new Uri(DataStore.PublicBlacklistCdnUrl), TimeSpan.FromMilliseconds(600))
         };
         var uniqueSources = httpSources
             .DistinctBy(source => source.Uri.AbsoluteUri, StringComparer.OrdinalIgnoreCase)
@@ -60,6 +61,11 @@ internal static class PublicBlacklistDownloader
 
         throw new AggregateException("All public blacklist sources are unavailable.", failures);
     }
+
+    private static Task<string> FetchProductionSourceAsync(Uri source, CancellationToken cancellationToken) =>
+        SignedBlacklistClient.IsDataUri(source)
+            ? SignedBlacklistClient.FetchAndVerifyAsync(source, cancellationToken)
+            : DataStore.FetchRemoteJsonAsync(source, cancellationToken);
 
     private static async Task<string> FetchWithRetryAsync(
         Uri source,

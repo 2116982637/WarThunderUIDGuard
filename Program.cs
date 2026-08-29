@@ -34,6 +34,7 @@ internal static class Program
     private static void RunRemoteSelfTest()
     {
         ApplicationConfiguration.Initialize();
+        string? signedJson = null;
         string? json = null;
         Exception? error = null;
         using var testHost = new Form
@@ -49,6 +50,9 @@ internal static class Program
         {
             try
             {
+                signedJson = await SignedBlacklistClient.FetchAndVerifyAsync(
+                    new Uri(SignedBlacklistClient.DataUrl),
+                    default);
                 json = await PublicBlacklistDownloader.FetchJsonAsync(new Uri(DataStore.SharedBlacklistUrl), default);
             }
             catch (Exception ex)
@@ -62,6 +66,12 @@ internal static class Program
         };
         Application.Run(testHost);
         if (error is not null) throw error;
+        using var signedDocument = System.Text.Json.JsonDocument.Parse(
+            signedJson ?? throw new InvalidDataException("No signed JSON was downloaded."));
+        if (!signedDocument.RootElement.TryGetProperty("Players", out var signedPlayers) ||
+            signedPlayers.ValueKind != System.Text.Json.JsonValueKind.Array ||
+            signedPlayers.GetArrayLength() == 0)
+            throw new InvalidDataException("The signed public blacklist contains no players.");
         using var document = System.Text.Json.JsonDocument.Parse(
             json ?? throw new InvalidDataException("No JSON was downloaded."));
         if (!document.RootElement.TryGetProperty("Players", out var players) ||
@@ -69,6 +79,7 @@ internal static class Program
             players.GetArrayLength() == 0)
             throw new InvalidDataException("The public blacklist contains no players.");
 
-        Console.WriteLine($"REMOTE SELF-TEST OK ({players.GetArrayLength()} players, {json.Length} characters)");
+        Console.WriteLine(
+            $"REMOTE SELF-TEST OK ({players.GetArrayLength()} players, signed server verified, {json.Length} characters)");
     }
 }
