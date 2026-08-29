@@ -60,6 +60,10 @@ OneDrive 文件写入成功后由 OneDrive 客户端负责上传；公开 GitHub
 dotnet publish -c Release -r win-x64 --self-contained false
 ```
 
+## 同步服务器
+
+仓库中的 `server` 目录保存当前只读镜像服务器的公开配置和刷新脚本，便于重建及审计。服务器私钥不会提交到仓库；实际私钥使用 Windows DPAPI 的 `LocalMachine` 范围加密保存在服务器本机。计划任务定时刷新公开黑名单与最新 GitHub Release，验证发布附件的 SHA-256 后再生成 RSA 签名元数据。
+
 ## 合规说明
 
 本项目是非官方工具，与 Gaijin Entertainment 无关联。Gaijin 的条款禁止未经授权、干扰游戏或提供不公平优势的第三方软件；即使这里只读取本地接口，也应由使用者自行确认当前规则并承担使用风险。

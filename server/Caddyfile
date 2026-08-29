@@ -1,0 +1,24 @@
+{
+    auto_https off
+}
+
+:8443 {
+    root * C:\ProgramData\WarThunderUIDGuardSync\www
+    header {
+        Access-Control-Allow-Origin "*"
+        Cache-Control "no-store"
+        X-Content-Type-Options "nosniff"
+    }
+
+    @blacklist path /blacklist.json /blacklist.sig /signing-public.xml
+    handle @blacklist {
+        file_server
+    }
+
+    handle_path /updates/* {
+        root * C:\ProgramData\WarThunderUIDGuardSync\www\updates
+        file_server
+    }
+
+    respond 404
+}
