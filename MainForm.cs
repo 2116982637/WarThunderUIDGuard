@@ -21,6 +21,9 @@ public sealed class MainForm : Form
     private readonly Button _pullOneDriveButton = new();
     private readonly Button _syncNicknameButton = new();
     private readonly Button _updateButton = new();
+    private readonly Label _subtitle = new();
+    private readonly Label _remoteSyncStatus = new();
+    private readonly Label _activityStatus = new();
     private readonly List<Detection> _detections = [];
     private string _statusKey = "Status.NotStarted";
     private string _statusPrefix = "○";
@@ -37,11 +40,12 @@ public sealed class MainForm : Form
     public MainForm()
     {
         _store = new DataStore(remoteFetcher: PublicBlacklistDownloader.FetchJsonAsync);
-        MinimumSize = new Size(980, 660);
-        Size = new Size(1080, 720);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        MinimumSize = new Size(980, 680);
+        Size = new Size(1180, 780);
         StartPosition = FormStartPosition.CenterScreen;
-        Font = new Font("Microsoft YaHei UI", 9);
-        BackColor = Color.FromArgb(246, 247, 250);
+        Font = new Font("Microsoft YaHei UI", 9.25f);
+        BackColor = UiTheme.Background;
 
         DataStoreLoadException? loadError = null;
         try { _data = _store.Load(); }
@@ -69,7 +73,7 @@ public sealed class MainForm : Form
         _client.ConnectionChanged += (connected, text) => Ui(() =>
         {
             if (connected) _connectionTimeoutTimer.Stop();
-            SetStatus(text, connected ? "●" : "○", connected ? Color.SeaGreen : Color.DarkOrange);
+            SetStatus(text, connected ? "●" : "○", connected ? UiTheme.Success : UiTheme.Warning);
         });
         _client.IdentityObserved += (uid, alias, source, detail) => Ui(() => HandleDetection(uid, alias, source, detail));
         _connectionTimeoutTimer.Tick += (_, _) => HandleConnectionTimeout();
@@ -85,43 +89,129 @@ public sealed class MainForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(18), RowCount = 4, ColumnCount = 1 };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
+        SuspendLayout();
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(22),
+            RowCount = 4,
+            ColumnCount = 1,
+            BackColor = UiTheme.Background,
+            AutoScroll = true
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 67));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
         Controls.Add(root);
 
-        var header = new Panel { Dock = DockStyle.Fill };
-        header.Controls.Add(new Label
+        var header = CreateCard(new Padding(20, 12, 20, 12), new Padding(0, 0, 0, 12));
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        header.Controls.Add(headerLayout);
+
+        var brand = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+        brand.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        brand.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        brand.Controls.Add(new Label
         {
             Text = "UID Guard",
-            Font = new Font("Microsoft YaHei UI", 22, FontStyle.Bold),
-            ForeColor = Color.FromArgb(35, 39, 48),
-            AutoSize = true,
-            Location = new Point(0, 4)
-        });
+            Font = new Font("Microsoft YaHei UI", 20.5f, FontStyle.Bold),
+            ForeColor = UiTheme.TextPrimary,
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.BottomLeft,
+            Margin = new Padding(0)
+        }, 0, 0);
+        _subtitle.Tag = "App.Subtitle";
+        _subtitle.ForeColor = UiTheme.TextSecondary;
+        _subtitle.AutoSize = false;
+        _subtitle.Dock = DockStyle.Fill;
+        _subtitle.TextAlign = ContentAlignment.TopLeft;
+        _subtitle.Margin = new Padding(1, 2, 0, 0);
+        brand.Controls.Add(_subtitle, 0, 1);
+        headerLayout.Controls.Add(brand, 0, 0);
+
+        var headerActions = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+        headerActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        headerActions.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var statusRow = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+        statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        statusRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _remoteSyncStatus.AutoSize = false;
+        _remoteSyncStatus.Dock = DockStyle.Fill;
+        _remoteSyncStatus.TextAlign = ContentAlignment.MiddleLeft;
+        _remoteSyncStatus.AutoEllipsis = true;
+        _remoteSyncStatus.ForeColor = UiTheme.TextSecondary;
+        _remoteSyncStatus.Margin = new Padding(0);
+        statusRow.Controls.Add(_remoteSyncStatus, 0, 0);
+
         _status.Text = "";
-        _status.AutoSize = true;
-        _status.ForeColor = Color.DarkOrange;
-        _status.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        _status.Location = new Point(760, 10);
+        _status.AutoSize = false;
+        _status.Dock = DockStyle.Fill;
+        _status.TextAlign = ContentAlignment.MiddleRight;
+        _status.ForeColor = UiTheme.Warning;
+        _status.Font = new Font(Font, FontStyle.Bold);
+        _status.Margin = new Padding(0);
+        statusRow.Controls.Add(_status, 1, 0);
+        headerActions.Controls.Add(statusRow, 0, 0);
+
+        var quickControls = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+            Padding = new Padding(0, 4, 0, 0)
+        };
         _monitorButton.Tag = "Button.StartMonitoring";
-        _monitorButton.Size = new Size(142, 36);
-        _monitorButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        _monitorButton.Location = new Point(885, 34);
-        _monitorButton.BackColor = Color.FromArgb(45, 108, 223);
-        _monitorButton.ForeColor = Color.White;
-        _monitorButton.FlatStyle = FlatStyle.Flat;
+        _monitorButton.Size = new Size(170, 38);
+        _monitorButton.Margin = new Padding(12, 0, 0, 0);
+        UiTheme.StyleButton(_monitorButton, UiTheme.Primary);
         _monitorButton.Click += (_, _) => ToggleMonitor();
 
         _languageLabel.Tag = "Label.Language";
         _languageLabel.AutoSize = true;
-        _languageLabel.ForeColor = Color.DimGray;
-        _languageLabel.Top = 45;
+        _languageLabel.ForeColor = UiTheme.TextSecondary;
+        _languageLabel.Margin = new Padding(8, 9, 6, 0);
         _languageSelector.DropDownStyle = ComboBoxStyle.DropDownList;
-        _languageSelector.Size = new Size(108, 28);
-        _languageSelector.Top = 39;
+        _languageSelector.Size = new Size(112, 34);
+        _languageSelector.Margin = new Padding(0, 2, 0, 0);
+        UiTheme.StyleComboBox(_languageSelector);
         _languageSelector.Items.AddRange(["中文", "English"]);
         _initializingLanguage = true;
         _languageSelector.SelectedIndex = Localizer.Current == AppLanguage.Chinese ? 0 : 1;
@@ -129,105 +219,149 @@ public sealed class MainForm : Form
         _languageSelector.SelectedIndexChanged += (_, _) => ChangeLanguage();
 
         _oneDriveSync.AutoSize = true;
-        _oneDriveSync.Top = 43;
-        _oneDriveSync.FlatStyle = FlatStyle.System;
+        _oneDriveSync.Tag = "Label.RemoteSync";
+        _oneDriveSync.Margin = new Padding(18, 9, 0, 0);
+        UiTheme.StyleCheckBox(_oneDriveSync);
         _initializingOneDrive = true;
         _oneDriveSync.Checked = _data.OneDriveSyncEnabled;
         _initializingOneDrive = false;
         _oneDriveSync.CheckedChanged += (_, _) => ChangeOneDriveSync();
-        header.Resize += (_, _) =>
-        {
-            PositionHeaderControls();
-        };
-        header.Controls.AddRange([_status, _monitorButton, _languageLabel, _languageSelector, _oneDriveSync]);
+        quickControls.Controls.AddRange([_monitorButton, _languageSelector, _languageLabel, _oneDriveSync]);
+        headerActions.Controls.Add(quickControls, 0, 1);
+        headerLayout.Controls.Add(headerActions, 1, 0);
         root.Controls.Add(header, 0, 0);
 
+        var inputCard = CreateCard(new Padding(16, 12, 16, 14), new Padding(0, 0, 0, 12));
         var form = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 7,
+            ColumnCount = 4,
             RowCount = 2,
-            Padding = new Padding(0, 8, 0, 8)
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
         };
-        form.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        form.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        form.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42));
-        form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
-        form.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
-        form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36));
-        form.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48));
-        form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
-        form.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        form.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
+        form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+        form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26));
+        form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18));
         AddField(form, "Label.Uid", _uid, 0);
-        AddField(form, "Label.Nickname", _aliases, 2);
-        AddField(form, "Label.Note", _note, 4);
-        var add = MakeButton("Button.AddOrUpdate", Color.FromArgb(33, 150, 83));
-        add.Dock = DockStyle.Fill;
-        add.Margin = new Padding(8, 7, 0, 7);
-        add.Click += (_, _) => AddOrUpdate();
-        form.Controls.Add(add, 6, 0);
-        var requestAdd = MakeButton("Button.RequestAdd", Color.FromArgb(220, 126, 34));
-        requestAdd.Dock = DockStyle.Fill;
-        requestAdd.Margin = new Padding(8, 7, 0, 7);
-        requestAdd.Click += (_, _) => RequestAddition();
-        form.Controls.Add(requestAdd, 6, 1);
-        root.Controls.Add(form, 0, 1);
+        AddField(form, "Label.Nickname", _aliases, 1);
+        AddField(form, "Label.Note", _note, 2);
 
+        var actions = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 2,
+            ColumnCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(10, 0, 0, 0)
+        };
+        actions.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        actions.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        var add = MakeButton("Button.AddOrUpdate", UiTheme.Success);
+        add.Dock = DockStyle.Fill;
+        add.Margin = new Padding(0, 0, 0, 4);
+        add.Padding = new Padding(0);
+        add.Click += (_, _) => AddOrUpdate();
+        var requestAdd = MakeButton("Button.RequestAdd", UiTheme.Warning);
+        requestAdd.Dock = DockStyle.Fill;
+        requestAdd.Margin = new Padding(0, 4, 0, 0);
+        requestAdd.Padding = new Padding(0);
+        requestAdd.Click += (_, _) => RequestAddition();
+        actions.Controls.Add(add, 0, 0);
+        actions.Controls.Add(requestAdd, 0, 1);
+        form.Controls.Add(actions, 3, 0);
+        form.SetRowSpan(actions, 2);
+        inputCard.Controls.Add(form);
+        root.Controls.Add(inputCard, 0, 1);
+
+        var gridCard = CreateCard(new Padding(14, 10, 14, 14), new Padding(0, 0, 0, 12));
         var gridPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
-            Margin = new Padding(0)
+            RowCount = 3,
+            Margin = new Padding(0),
+            BackColor = Color.Transparent
         };
-        gridPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        gridPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        gridPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         gridPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var gridToolbar = new Panel { Dock = DockStyle.Fill };
-        _count.AutoSize = true;
-        _count.Font = new Font(Font, FontStyle.Bold);
-        _count.Location = new Point(0, 9);
-        gridToolbar.Controls.Add(_count);
-
-        var toolbarButtons = new FlowLayoutPanel
+        var gridStatusRow = new TableLayoutPanel
         {
-            Dock = DockStyle.Right,
-            Width = 624,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Padding = new Padding(0, 3, 0, 0)
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
         };
-        var remove = MakeButton("Button.DeleteSelected", Color.FromArgb(180, 55, 55));
-        remove.Size = new Size(96, 30);
+        gridStatusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36));
+        gridStatusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 64));
+        gridStatusRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _count.AutoSize = false;
+        _count.Dock = DockStyle.Fill;
+        _count.TextAlign = ContentAlignment.MiddleLeft;
+        _count.Font = new Font(Font, FontStyle.Bold);
+        _count.ForeColor = UiTheme.TextPrimary;
+        _count.Margin = new Padding(4, 0, 0, 0);
+        _activityStatus.AutoSize = false;
+        _activityStatus.Dock = DockStyle.Fill;
+        _activityStatus.TextAlign = ContentAlignment.MiddleRight;
+        _activityStatus.AutoEllipsis = true;
+        _activityStatus.ForeColor = UiTheme.TextSecondary;
+        _activityStatus.Margin = new Padding(8, 0, 4, 0);
+        gridStatusRow.Controls.Add(_count, 0, 0);
+        gridStatusRow.Controls.Add(_activityStatus, 1, 0);
+        gridPanel.Controls.Add(gridStatusRow, 0, 0);
+
+        var toolbarButtons = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 6,
+            RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        foreach (var width in new[] { 16f, 16f, 15f, 16f, 15f, 18f })
+            toolbarButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, width));
+        toolbarButtons.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var remove = MakeButton("Button.DeleteSelected", UiTheme.Danger);
         remove.Click += (_, _) => RemoveSelected();
-        var simulate = MakeButton("Button.TestAlert", Color.FromArgb(94, 80, 180));
-        simulate.Size = new Size(96, 30);
+        var simulate = MakeButton("Button.TestAlert", UiTheme.Purple);
         simulate.Click += (_, _) => Simulate();
-        ConfigureToolbarButton(_uploadOneDriveButton, "Button.UploadOneDrive", Color.FromArgb(33, 150, 83));
+        ConfigureToolbarButton(_uploadOneDriveButton, "Button.UploadOneDrive", UiTheme.Success);
         _uploadOneDriveButton.Click += async (_, _) => await UploadToServerAsync();
-        ConfigureToolbarButton(_pullOneDriveButton, "Button.PullOneDrive", Color.FromArgb(45, 108, 223));
+        ConfigureToolbarButton(_pullOneDriveButton, "Button.PullOneDrive", UiTheme.Primary);
         _pullOneDriveButton.Click += async (_, _) => await PullFromOneDriveAsync();
-        ConfigureToolbarButton(_syncNicknameButton, "Button.SyncNickname", Color.FromArgb(29, 125, 140));
+        ConfigureToolbarButton(_syncNicknameButton, "Button.SyncNickname", UiTheme.Teal);
         _syncNicknameButton.Click += async (_, _) => await SyncSelectedNicknameAsync();
-        ConfigureToolbarButton(_updateButton, "Button.CheckUpdate", Color.FromArgb(100, 75, 160));
+        ConfigureToolbarButton(_updateButton, "Button.CheckUpdate", UiTheme.Purple);
         _updateButton.Click += async (_, _) => await UpdateApplicationAsync();
-        toolbarButtons.Controls.AddRange([_syncNicknameButton, _uploadOneDriveButton, _pullOneDriveButton, _updateButton, simulate, remove]);
-        gridToolbar.Controls.Add(toolbarButtons);
-        gridPanel.Controls.Add(gridToolbar, 0, 0);
+        var toolbarItems = new[] { _syncNicknameButton, _uploadOneDriveButton, _pullOneDriveButton, _updateButton, simulate, remove };
+        for (var i = 0; i < toolbarItems.Length; i++)
+        {
+            toolbarItems[i].Dock = DockStyle.Fill;
+            toolbarItems[i].Margin = new Padding(i == 0 ? 4 : 5, 0, i == toolbarItems.Length - 1 ? 4 : 5, 0);
+            toolbarButtons.Controls.Add(toolbarItems[i], i, 0);
+        }
+        gridPanel.Controls.Add(toolbarButtons, 0, 1);
 
         _grid.Dock = DockStyle.Fill;
-        _grid.Margin = new Padding(0, 0, 0, 8);
+        _grid.Margin = new Padding(4, 0, 4, 0);
         _grid.ReadOnly = true;
         _grid.AllowUserToAddRows = false;
         _grid.AllowUserToDeleteRows = false;
         _grid.RowHeadersVisible = false;
-        _grid.ColumnHeadersHeight = 34;
-        _grid.RowTemplate.Height = 32;
+        _grid.ColumnHeadersHeight = 36;
+        _grid.RowTemplate.Height = 34;
         _grid.MultiSelect = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _grid.BackgroundColor = Color.White;
-        _grid.BorderStyle = BorderStyle.FixedSingle;
+        UiTheme.StyleDataGridView(_grid);
         _grid.Columns.Add("uid", "");
         _grid.Columns.Add("aliases", "");
         _grid.Columns.Add("note", "");
@@ -236,39 +370,82 @@ public sealed class MainForm : Form
         _grid.Columns[1].FillWeight = 36;
         _grid.Columns[2].FillWeight = 28;
         _grid.Columns[3].FillWeight = 18;
-        gridPanel.Controls.Add(_grid, 0, 1);
-        root.Controls.Add(gridPanel, 0, 2);
+        gridPanel.Controls.Add(_grid, 0, 2);
+        gridCard.Controls.Add(gridPanel);
+        root.Controls.Add(gridCard, 0, 2);
 
-        var logPanel = new GroupBox { Tag = "Group.DetectionLog", Dock = DockStyle.Fill, Padding = new Padding(8) };
+        var logCard = CreateCard(new Padding(14, 10, 14, 14), new Padding(0));
+        var logPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+        logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        logPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        logPanel.Controls.Add(new Label
+        {
+            Tag = "Group.DetectionLog",
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font(Font, FontStyle.Bold),
+            ForeColor = UiTheme.TextPrimary,
+            Margin = new Padding(4, 0, 0, 0)
+        }, 0, 0);
         _log.Dock = DockStyle.Fill;
         _log.HorizontalScrollbar = true;
-        logPanel.Controls.Add(_log);
-        root.Controls.Add(logPanel, 0, 3);
+        _log.BorderStyle = BorderStyle.None;
+        _log.BackColor = UiTheme.Surface;
+        _log.ForeColor = UiTheme.TextSecondary;
+        _log.IntegralHeight = false;
+        _log.Margin = new Padding(4, 0, 4, 0);
+        logPanel.Controls.Add(_log, 0, 1);
+        logCard.Controls.Add(logPanel);
+        root.Controls.Add(logCard, 0, 3);
+
+        ResumeLayout(performLayout: true);
     }
 
     private static void AddField(TableLayoutPanel panel, string textKey, Control control, int column)
     {
-        panel.Controls.Add(new Label { Tag = textKey, AutoSize = true, Anchor = AnchorStyles.Left }, column, 0);
-        control.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        control.Margin = new Padding(3, 0, 8, 0);
-        panel.Controls.Add(control, column + 1, 0);
+        panel.Controls.Add(new Label
+        {
+            Tag = textKey,
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = UiTheme.TextSecondary,
+            Font = new Font("Microsoft YaHei UI", 9, FontStyle.Bold),
+            Margin = new Padding(4, 0, 8, 0)
+        }, column, 0);
+        control.Dock = DockStyle.Fill;
+        control.Margin = new Padding(4, 2, 8, 4);
+        if (control is TextBox textBox) UiTheme.StyleTextBox(textBox);
+        panel.Controls.Add(control, column, 1);
     }
 
-    private static Button MakeButton(string textKey, Color color) => new()
+    private static Panel CreateCard(Padding padding, Padding margin) => new UiCardPanel
     {
-        Tag = textKey,
-        BackColor = color,
-        ForeColor = Color.White,
-        FlatStyle = FlatStyle.Flat
+        Dock = DockStyle.Fill,
+        Padding = padding,
+        Margin = margin,
+        BackColor = UiTheme.Surface
     };
+
+    private static Button MakeButton(string textKey, Color color)
+    {
+        var button = new Button { Tag = textKey };
+        UiTheme.StyleButton(button, color);
+        return button;
+    }
 
     private static void ConfigureToolbarButton(Button button, string textKey, Color color)
     {
         button.Tag = textKey;
-        button.BackColor = color;
-        button.ForeColor = Color.White;
-        button.FlatStyle = FlatStyle.Flat;
-        button.Size = new Size(96, 30);
+        UiTheme.StyleButton(button, color, compact: true);
     }
 
     private void ToggleMonitor()
@@ -278,7 +455,7 @@ public sealed class MainForm : Form
             _connectionTimeoutTimer.Stop();
             _client.Stop();
             RefreshMonitorButton();
-            SetStatus("Status.Stopped", "○", Color.DarkOrange);
+            SetStatus("Status.Stopped", "○", UiTheme.Warning);
         }
         else
         {
@@ -286,7 +463,7 @@ public sealed class MainForm : Form
             _connectionTimeoutTimer.Stop();
             _connectionTimeoutTimer.Start();
             RefreshMonitorButton();
-            SetStatus("Status.Connecting", "○", Color.DarkOrange);
+            SetStatus("Status.Connecting", "○", UiTheme.Warning);
         }
     }
 
@@ -297,7 +474,7 @@ public sealed class MainForm : Form
 
         _client.Stop();
         RefreshMonitorButton();
-        SetStatus("Status.ConnectionFailed", "✕", Color.Firebrick);
+        SetStatus("Status.ConnectionFailed", "✕", UiTheme.Danger);
     }
 
     internal static bool ShouldFailConnection(bool isRunning, bool isConnected) =>
@@ -647,17 +824,20 @@ public sealed class MainForm : Form
 
     private void RenderCount()
     {
-        var count = Localizer.F("Count.Blacklist", _data.Players.Count);
+        _count.Text = Localizer.F("Count.Blacklist", _data.Players.Count);
         if (_nicknameSyncStatusKey is null)
         {
-            _count.Text = count;
+            _activityStatus.Text = "";
             return;
         }
 
-        var status = _nicknameSyncStatusArgs.Length == 0
+        _activityStatus.Text = _nicknameSyncStatusArgs.Length == 0
             ? Localizer.T(_nicknameSyncStatusKey)
             : Localizer.F(_nicknameSyncStatusKey, _nicknameSyncStatusArgs);
-        _count.Text = $"{count}    ·    {status}";
+        _activityStatus.ForeColor = _nicknameSyncStatusKey.StartsWith("Error.", StringComparison.Ordinal) ||
+                                    _nicknameSyncStatusKey.EndsWith("Failed", StringComparison.Ordinal)
+            ? UiTheme.Danger
+            : UiTheme.TextSecondary;
     }
 
     private void SaveData()
@@ -683,7 +863,6 @@ public sealed class MainForm : Form
         RefreshGrid();
         RenderDetectionLog();
         UpdateOneDriveSyncUi();
-        PositionHeaderControls();
     }
 
     private static void ApplyTaggedText(Control parent)
@@ -709,8 +888,6 @@ public sealed class MainForm : Form
     private void RenderStatus()
     {
         _status.Text = $"{_statusPrefix} {Localizer.T(_statusKey)}";
-        if (_status.Parent is not null)
-            _status.Left = _status.Parent.ClientSize.Width - _status.Width - 8;
     }
 
     private void RenderDetectionLog()
@@ -724,20 +901,10 @@ public sealed class MainForm : Form
         _log.EndUpdate();
     }
 
-    private void PositionHeaderControls()
-    {
-        if (_monitorButton.Parent is not Control header) return;
-        _status.Left = header.ClientSize.Width - _status.Width - 8;
-        _monitorButton.Left = header.ClientSize.Width - _monitorButton.Width - 8;
-        _languageSelector.Left = _monitorButton.Left - _languageSelector.Width - 12;
-        _languageLabel.Left = _languageSelector.Left - _languageLabel.Width - 6;
-        _oneDriveSync.Left = _languageLabel.Left - _oneDriveSync.Width - 18;
-    }
-
     private void UpdateOneDriveSyncUi()
     {
         var status = _data.OneDriveSyncEnabled ? _store.OneDriveStatus : OneDriveSyncStatus.Disabled;
-        _oneDriveSync.Text = Localizer.T(status switch
+        _remoteSyncStatus.Text = Localizer.T(status switch
         {
             OneDriveSyncStatus.Ready => "OneDrive.Ready",
             OneDriveSyncStatus.Uploading => "OneDrive.Uploading",
@@ -752,21 +919,18 @@ public sealed class MainForm : Form
             OneDriveSyncStatus.Error => "OneDrive.Error",
             _ => "OneDrive.Disabled"
         });
-        _oneDriveSync.ForeColor = status switch
+        _remoteSyncStatus.ForeColor = status switch
         {
-            OneDriveSyncStatus.Uploaded or OneDriveSyncStatus.Pulled => Color.SeaGreen,
-            OneDriveSyncStatus.Uploading => Color.FromArgb(45, 108, 223),
-            OneDriveSyncStatus.Cached => Color.DarkOrange,
-            OneDriveSyncStatus.Pulling => Color.FromArgb(45, 108, 223),
-            OneDriveSyncStatus.Unavailable => Color.DarkOrange,
-            OneDriveSyncStatus.UploadConflict or OneDriveSyncStatus.UploadRateLimited => Color.DarkOrange,
-            OneDriveSyncStatus.UploadUnauthorized => Color.Firebrick,
-            OneDriveSyncStatus.Error => Color.Firebrick,
-            _ => Color.DimGray
+            OneDriveSyncStatus.Uploaded or OneDriveSyncStatus.Pulled => UiTheme.Success,
+            OneDriveSyncStatus.Uploading or OneDriveSyncStatus.Pulling => UiTheme.Primary,
+            OneDriveSyncStatus.Cached or OneDriveSyncStatus.Unavailable => UiTheme.Warning,
+            OneDriveSyncStatus.UploadConflict or OneDriveSyncStatus.UploadRateLimited => UiTheme.Warning,
+            OneDriveSyncStatus.UploadUnauthorized or OneDriveSyncStatus.Error => UiTheme.Danger,
+            _ => UiTheme.TextSecondary
         };
+        _oneDriveSync.ForeColor = UiTheme.TextSecondary;
         _uploadOneDriveButton.Enabled = _data.OneDriveSyncEnabled && !_oneDriveBusy;
         _pullOneDriveButton.Enabled = _data.OneDriveSyncEnabled && !_oneDriveBusy;
-        PositionHeaderControls();
     }
 
     private void Ui(Action action)

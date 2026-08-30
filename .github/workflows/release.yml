@@ -15,6 +15,10 @@ permissions:
   actions: read
   contents: write
 
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: windows-latest
@@ -23,11 +27,26 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up .NET
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: "8.0.x"
+
+      - name: Validate release tag and project version
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Invalid release tag: $env:RELEASE_TAG"
+          }
+          [xml] $project = Get-Content -LiteralPath WarThunderUIDGuard.csproj
+          $projectVersion = [string] $project.Project.PropertyGroup.Version
+          $tagVersion = $env:RELEASE_TAG.Substring(1)
+          if ($projectVersion -ne $tagVersion) {
+            throw "Release tag $tagVersion does not match project version $projectVersion."
+          }
 
       - name: Run release self-tests
         shell: pwsh
@@ -42,6 +61,16 @@ jobs:
           -p:DebugType=None
           -p:DebugSymbols=false
           -o artifacts/app
+
+      - name: Validate portable executable version
+        shell: pwsh
+        run: |
+          $expectedVersion = [version] ($env:RELEASE_TAG.Substring(1) + '.0')
+          $actualVersion = [version] `
+            (Get-Item -LiteralPath artifacts/app/WarThunderUIDGuard.exe).VersionInfo.FileVersion
+          if ($actualVersion -ne $expectedVersion) {
+            throw "Portable EXE version $actualVersion does not match $expectedVersion."
+          }
 
       - name: Add license and privacy notices
         shell: pwsh

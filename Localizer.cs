@@ -12,8 +12,10 @@ public static class Localizer
 {
     private static readonly IReadOnlyDictionary<string, string> Chinese = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v{0} Safe",
+        ["App.Title"] = "War Thunder UID Guard · v{0}",
+        ["App.Subtitle"] = "本地只读 · UID 黑名单监控",
         ["Label.Language"] = "语言",
+        ["Label.RemoteSync"] = "远程同步",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "昵称",
         ["Label.Note"] = "备注",
@@ -38,8 +40,8 @@ public static class Localizer
         ["Update.Restarting"] = "已下载更新 {0}，正在替换当前目录文件并重启…",
         ["Update.Failed"] = "自动更新失败，当前版本未修改",
         ["Update.InstallFailed"] = "更新安装失败，已恢复原版本",
-        ["OneDrive.Disabled"] = "远程手动同步",
-        ["OneDrive.Ready"] = "远程手动同步",
+        ["OneDrive.Disabled"] = "远程同步已关闭",
+        ["OneDrive.Ready"] = "远程同步就绪",
         ["OneDrive.Uploading"] = "正在加密上传管理员数据…",
         ["OneDrive.Pulling"] = "正在拉取远程数据…",
         ["OneDrive.Uploaded"] = "管理员数据已上传",
@@ -102,13 +104,15 @@ public static class Localizer
 
     private static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v{0} Safe",
+        ["App.Title"] = "War Thunder UID Guard · v{0}",
+        ["App.Subtitle"] = "Local read-only · UID blacklist monitor",
         ["Label.Language"] = "Language",
+        ["Label.RemoteSync"] = "Remote sync",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "Nickname",
         ["Label.Note"] = "Note",
         ["Placeholder.Uid"] = "Numeric account UID",
-        ["Placeholder.Aliases"] = "Current; previous names (semicolon-separated)",
+        ["Placeholder.Aliases"] = "Current / old names; use semicolons",
         ["Placeholder.Note"] = "Optional",
         ["Button.StartMonitoring"] = "Start monitoring",
         ["Button.StopMonitoring"] = "Stop monitoring",
@@ -128,8 +132,8 @@ public static class Localizer
         ["Update.Restarting"] = "Update {0} downloaded; replacing files in this folder and restarting…",
         ["Update.Failed"] = "Automatic update failed; the current version was not changed",
         ["Update.InstallFailed"] = "Update installation failed; the previous version was restored",
-        ["OneDrive.Disabled"] = "Manual remote sync",
-        ["OneDrive.Ready"] = "Manual remote sync",
+        ["OneDrive.Disabled"] = "Remote sync is off",
+        ["OneDrive.Ready"] = "Remote sync ready",
         ["OneDrive.Uploading"] = "Encrypting and uploading admin data…",
         ["OneDrive.Pulling"] = "Pulling remote data…",
         ["OneDrive.Uploaded"] = "Admin data uploaded",

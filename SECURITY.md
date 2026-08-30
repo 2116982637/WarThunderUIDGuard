@@ -1,6 +1,6 @@
 # 安全边界
 
-War Thunder UID Guard v0.7.5 对游戏采用“本地只读”设计。
+War Thunder UID Guard v0.8.0 对游戏采用“本地只读”设计。
 
 ## 强制限制
 
@@ -27,7 +27,7 @@ War Thunder UID Guard v0.7.5 对游戏采用“本地只读”设计。
 
 `%LOCALAPPDATA%\WarThunderUIDGuard\blacklist.json`
 
-提醒通过 Windows 通知区域完成，不绘制游戏内覆盖层。
+提醒通过不抢占焦点且自动关闭的右下角窗口完成，不绘制游戏内覆盖层，也不创建通知区域图标。
 
 ## 发布签名
 
