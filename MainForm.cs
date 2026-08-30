@@ -355,6 +355,8 @@ public sealed class MainForm : Form
         _grid.ReadOnly = true;
         _grid.AllowUserToAddRows = false;
         _grid.AllowUserToDeleteRows = false;
+        _grid.AllowUserToResizeColumns = false;
+        _grid.AllowUserToResizeRows = false;
         _grid.RowHeadersVisible = false;
         _grid.ColumnHeadersHeight = 36;
         _grid.RowTemplate.Height = 34;
