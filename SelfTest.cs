@@ -126,6 +126,10 @@ internal static class SelfTest
         Assert(Localizer.HasTranslation("Button.RequestAdd"), "addition request button is translated");
         Assert(Localizer.HasTranslation("Button.CheckUpdate"), "update button is translated");
         Assert(Localizer.HasTranslation("Update.InstallFailed"), "update rollback status is translated");
+        Assert(!typeof(MainForm).GetFields(
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic)
+            .Any(field => field.FieldType == typeof(NotifyIcon)), "the app has no notification-area icon");
         Assert(Localizer.HasTranslation("RequestAdd.Subject"), "addition request subject is translated");
         Assert(DataStore.IsAllowedRemoteUri(new Uri("https://1drv.ms/u/example")), "OneDrive short links are allowed");
         Assert(DataStore.IsAllowedRemoteUri(new Uri("https://public.bl.files.1drv.com/file")), "OneDrive download hosts are allowed");

@@ -13,7 +13,6 @@ public sealed class MainForm : Form
     private readonly Label _count = new();
     private readonly ListBox _log = new();
     private readonly Button _monitorButton = new();
-    private readonly NotifyIcon _tray = new();
     private readonly System.Windows.Forms.Timer _connectionTimeoutTimer = new() { Interval = 10000 };
     private readonly ComboBox _languageSelector = new();
     private readonly Label _languageLabel = new();
@@ -66,16 +65,6 @@ public sealed class MainForm : Form
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
 
-        _tray.Icon = SystemIcons.Shield;
-        _tray.Text = $"War Thunder UID Guard v{AutoUpdater.CurrentVersion}";
-        _tray.Visible = true;
-        _tray.BalloonTipClicked += (_, _) =>
-        {
-            Show();
-            WindowState = FormWindowState.Normal;
-            Activate();
-        };
-
         _client.PlayersProvider = () => _data.Players.ToList();
         _client.ConnectionChanged += (connected, text) => Ui(() =>
         {
@@ -91,8 +80,6 @@ public sealed class MainForm : Form
             _connectionTimeoutTimer.Stop();
             _connectionTimeoutTimer.Dispose();
             _client.Dispose();
-            _tray.Visible = false;
-            _tray.Dispose();
         };
     }
 
@@ -412,16 +399,15 @@ public sealed class MainForm : Form
     {
         System.Media.SystemSounds.Exclamation.Play();
         var note = string.IsNullOrWhiteSpace(detection.Player.Note) ? Localizer.T("Value.None") : detection.Player.Note;
-        _tray.ShowBalloonTip(
-            10000,
+        var alert = new DetectionAlertForm(
             Localizer.T("Alert.Title"),
             Localizer.F(
                 "Alert.Body",
                 detection.Player.Uid,
                 detection.MatchedAlias,
                 Localizer.T(detection.Source),
-                note),
-            ToolTipIcon.Warning);
+                note));
+        alert.Show();
     }
 
     private void RefreshGrid()
