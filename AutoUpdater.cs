@@ -199,6 +199,84 @@ internal static class AutoUpdater
         }
     }
 
+    public static bool TryLaunchVersionDirectoryRename(int parentProcessId)
+    {
+        // Framework-dependent development builds must never rename their bin directory.
+        if (!IsSingleFileDeployment()) return false;
+
+        string? workDirectory = null;
+        try
+        {
+            var currentDirectory = ResolveInstallDirectory(Environment.ProcessPath);
+            var versionMarker = Path.Combine(currentDirectory, "VERSION.txt");
+            if (!File.Exists(versionMarker) ||
+                !string.Equals(
+                    File.ReadAllText(versionMarker).Trim(),
+                    CurrentVersion.ToString(),
+                    StringComparison.Ordinal))
+                return false;
+
+            var expectedDirectoryName = GetVersionedDirectoryName(CurrentVersion);
+            if (string.Equals(
+                    Path.GetFileName(currentDirectory),
+                    expectedDirectoryName,
+                    StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var parentDirectory = Directory.GetParent(currentDirectory)?.FullName
+                ?? throw new InvalidOperationException("The application directory cannot be renamed safely.");
+            var targetDirectory = Path.Combine(parentDirectory, expectedDirectoryName);
+            if (Directory.Exists(targetDirectory))
+                throw new IOException($"The target update directory already exists: {targetDirectory}");
+
+            var executableName = Path.GetFileName(Environment.ProcessPath) ?? "WarThunderUIDGuard.exe";
+            var failureLog = GetFailureLogPath();
+            Directory.CreateDirectory(Path.GetDirectoryName(failureLog)!);
+            workDirectory = Path.Combine(
+                Path.GetTempPath(),
+                $"WarThunderUIDGuard-Rename-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(workDirectory);
+            var scriptPath = Path.Combine(workDirectory, "rename-version-directory.ps1");
+            File.WriteAllText(scriptPath, BuildDirectoryRenameScript(), new UTF8Encoding(true));
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                    "System32",
+                    "WindowsPowerShell",
+                    "v1.0",
+                    "powershell.exe"),
+                WorkingDirectory = Path.GetTempPath(),
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            };
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-NonInteractive");
+            startInfo.ArgumentList.Add("-ExecutionPolicy");
+            startInfo.ArgumentList.Add("Bypass");
+            startInfo.ArgumentList.Add("-File");
+            startInfo.ArgumentList.Add(scriptPath);
+            startInfo.ArgumentList.Add(parentProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add(currentDirectory);
+            startInfo.ArgumentList.Add(targetDirectory);
+            startInfo.ArgumentList.Add(executableName);
+            startInfo.ArgumentList.Add(workDirectory);
+            startInfo.ArgumentList.Add(failureLog);
+
+            if (Process.Start(startInfo) is null)
+                throw new InvalidOperationException("The version directory renamer could not be started.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (workDirectory is not null) TryDeleteDirectory(workDirectory);
+            WriteFailureLog(ex);
+            return false;
+        }
+    }
+
     internal static UpdateRelease? ParseReleaseJson(string json, Version currentVersion)
     {
         using var document = JsonDocument.Parse(json);
@@ -349,6 +427,9 @@ internal static class AutoUpdater
             ?? throw new InvalidOperationException("The application directory is unavailable.");
     }
 
+    internal static string GetVersionedDirectoryName(Version version) =>
+        $"WarThunderUIDGuard-v{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}-win-x64";
+
     internal static void ValidateExecutableVersion(string executablePath, Version expectedVersion)
     {
         var versionText = FileVersionInfo.GetVersionInfo(executablePath).FileVersion;
@@ -363,12 +444,16 @@ internal static class AutoUpdater
         Math.Max(version.Build, 0),
         Math.Max(version.Revision, 0));
 
+    private static bool IsSingleFileDeployment()
+    {
+#pragma warning disable IL3000 // Empty Assembly.Location is the documented single-file signal used here.
+        return string.IsNullOrEmpty(typeof(AutoUpdater).Assembly.Location);
+#pragma warning restore IL3000
+    }
+
     internal static string? TakeInstallerFailure()
     {
-        var path = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WarThunderUIDGuard",
-            "update-error.log");
+        var path = GetFailureLogPath();
         try
         {
             if (!File.Exists(path)) return null;
@@ -380,6 +465,22 @@ internal static class AutoUpdater
         {
             return null;
         }
+    }
+
+    private static string GetFailureLogPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "WarThunderUIDGuard",
+        "update-error.log");
+
+    private static void WriteFailureLog(Exception exception)
+    {
+        try
+        {
+            var path = GetFailureLogPath();
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, exception.ToString(), new UTF8Encoding(false));
+        }
+        catch { }
     }
 
     private static async Task<byte[]> DownloadBytesAsync(
@@ -616,6 +717,63 @@ internal static class AutoUpdater
             $oldExecutable = Join-Path $InstallDirectory $ExecutableName
             if (Test-Path -LiteralPath $oldExecutable) {
                 Start-Process -FilePath $oldExecutable -WorkingDirectory $InstallDirectory
+            }
+        }
+        finally {
+            Start-Sleep -Seconds 1
+            Remove-Item -LiteralPath $WorkDirectory -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        """;
+
+    private static string BuildDirectoryRenameScript() =>
+        """
+        param(
+            [Parameter(Mandatory=$true)][int]$ParentProcessId,
+            [Parameter(Mandatory=$true)][string]$CurrentDirectory,
+            [Parameter(Mandatory=$true)][string]$TargetDirectory,
+            [Parameter(Mandatory=$true)][string]$ExecutableName,
+            [Parameter(Mandatory=$true)][string]$WorkDirectory,
+            [Parameter(Mandatory=$true)][string]$FailureLog
+        )
+        $ErrorActionPreference = 'Stop'
+        $moved = $false
+        try {
+            $deadline = [DateTime]::UtcNow.AddSeconds(120)
+            while (Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue) {
+                if ([DateTime]::UtcNow -gt $deadline) { throw 'The running application did not close in time.' }
+                Start-Sleep -Milliseconds 250
+            }
+            if (Test-Path -LiteralPath $TargetDirectory) {
+                throw "The target update directory already exists: $TargetDirectory"
+            }
+
+            Move-Item -LiteralPath $CurrentDirectory -Destination $TargetDirectory
+            $moved = $true
+            $newExecutable = Join-Path $TargetDirectory $ExecutableName
+            if (-not (Test-Path -LiteralPath $newExecutable)) {
+                throw 'The executable is missing after renaming the update directory.'
+            }
+
+            Remove-Item -LiteralPath $FailureLog -Force -ErrorAction SilentlyContinue
+            Start-Process -FilePath $newExecutable -WorkingDirectory $TargetDirectory
+        }
+        catch {
+            $message = ($_ | Out-String)
+            if ($moved -and (Test-Path -LiteralPath $TargetDirectory) -and
+                -not (Test-Path -LiteralPath $CurrentDirectory)) {
+                Move-Item -LiteralPath $TargetDirectory -Destination $CurrentDirectory -ErrorAction SilentlyContinue
+                $moved = $false
+            }
+            New-Item -ItemType Directory -Path (Split-Path -Parent $FailureLog) -Force | Out-Null
+            Set-Content -LiteralPath $FailureLog -Value $message -Encoding UTF8
+            $restartDirectory = if (Test-Path -LiteralPath $CurrentDirectory) {
+                $CurrentDirectory
+            } else {
+                $TargetDirectory
+            }
+            $restartExecutable = Join-Path $restartDirectory $ExecutableName
+            if (Test-Path -LiteralPath $restartExecutable) {
+                Start-Process -FilePath $restartExecutable -WorkingDirectory $restartDirectory
             }
         }
         finally {

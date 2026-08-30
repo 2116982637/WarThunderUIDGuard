@@ -288,6 +288,8 @@ internal static class SelfTest
                Path.Combine(archiveRoot, "WarThunderUIDGuard.exe"), "safe archive paths remain inside staging");
         Assert(AutoUpdater.ResolveInstallDirectory(@"C:\Apps\WTUIDGuard\WarThunderUIDGuard.exe") ==
                @"C:\Apps\WTUIDGuard", "updates target the running executable directory");
+        Assert(AutoUpdater.GetVersionedDirectoryName(new Version(0, 7, 4)) ==
+               "WarThunderUIDGuard-v0.7.4-win-x64", "updated folders use the target version name");
         AutoUpdater.ValidateExecutableVersion(Environment.ProcessPath!, AutoUpdater.CurrentVersion);
         var wrongExecutableVersionBlocked = false;
         try { AutoUpdater.ValidateExecutableVersion(Environment.ProcessPath!, new Version(99, 0, 0)); }

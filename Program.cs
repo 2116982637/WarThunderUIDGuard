@@ -30,6 +30,9 @@ internal static class Program
             return;
         }
 
+        if (AutoUpdater.TryLaunchVersionDirectoryRename(Environment.ProcessId))
+            return;
+
         ApplicationConfiguration.Initialize();
         Application.Run(new MainForm());
     }
