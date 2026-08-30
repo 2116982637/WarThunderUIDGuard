@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>WarThunderUIDGuard</AssemblyName>
     <RootNamespace>WarThunderUIDGuard</RootNamespace>
-    <Version>0.7.0</Version>
+    <Version>0.7.1</Version>
     <Authors>elainasamae</Authors>
     <Company>elainasamae</Company>
     <AssemblyTitle>War Thunder UID Guard</AssemblyTitle>

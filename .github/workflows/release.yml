@@ -29,6 +29,10 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Run release self-tests
+        shell: pwsh
+        run: dotnet run -c Release -- --self-test
+
       - name: Publish portable app
         shell: pwsh
         run: >-
@@ -38,10 +42,6 @@ jobs:
           -p:DebugType=None
           -p:DebugSymbols=false
           -o artifacts/app
-
-      - name: Run release self-tests
-        shell: pwsh
-        run: dotnet run -c Release --no-build -- --self-test
 
       - name: Add license and privacy notices
         shell: pwsh
