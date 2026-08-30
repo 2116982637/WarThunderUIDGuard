@@ -1,6 +1,6 @@
 # 安全边界
 
-War Thunder UID Guard v0.6.3 对游戏采用“本地只读”设计。
+War Thunder UID Guard v0.7.0 对游戏采用“本地只读”设计。
 
 ## 强制限制
 
@@ -31,7 +31,7 @@ War Thunder UID Guard v0.6.3 对游戏采用“本地只读”设计。
 
 ## 发布签名
 
-项目的 Authenticode 签名状态和受信任发布流程见 [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)。只有签名状态为 `Valid` 且签名者为 SignPath Foundation 的发布包才能标记为已签名；SHA-256 校验不能替代发布者身份签名。
+当前发布版本没有 Authenticode 发布者签名，Windows 可能显示“未知发布者”。SHA-256 与服务器签名元数据用于验证文件完整性，但不能替代发布者身份签名；未来若重新启用可信代码签名，将按照 [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) 执行。
 
 ## 保证范围
 

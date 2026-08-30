@@ -1,6 +1,6 @@
-# SignPath 配置步骤
+# SignPath 配置步骤（暂缓）
 
-本文件只说明项目所有者在 SignPath Foundation 批准申请后需要完成的配置。API Token、证书和私钥不得提交到仓库。
+可信代码签名目前未启用。本文件仅保留为将来的配置参考；API Token、证书和私钥不得提交到仓库。
 
 1. 确保 GitHub 与 SignPath 账户均已启用多重身份验证。
 2. 在 SignPath 中把 `https://github.com/elainasamae/WarThunderUIDGuard` 连接为 GitHub.com 受信任构建源，并安装 SignPath GitHub App。
@@ -14,7 +14,7 @@
    - Variable：`SIGNPATH_SIGNING_POLICY_SLUG`
    - Variable：`SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`
 
-6. 使用新版本标签触发发布。流程会在 SignPath 中等待人工批准，随后验证 Authenticode 发布者与可信时间戳，再生成 ZIP 和 SHA-256。
+6. 重新启用签名版工作流后，再使用新版本标签触发发布。流程应在 SignPath 中等待人工批准，随后验证 Authenticode 发布者与可信时间戳，再生成 ZIP 和 SHA-256。
 7. 下载最终 ZIP，运行以下命令复核：
 
 ```powershell
@@ -23,4 +23,4 @@ Get-AuthenticodeSignature '.\verify\WarThunderUIDGuard.exe' |
     Format-List Status, SignerCertificate, TimeStamperCertificate
 ```
 
-必须得到 `Status: Valid`，且签名者包含 `SignPath Foundation`。在满足这些条件前，不得发布新的未签名版本；当前 v0.6.3 继续作为历史未签名版本保留。
+只有得到 `Status: Valid` 且签名者符合预期的版本才能称为“已签名”。当前版本明确按未签名软件发布，不宣称具备可信发布者身份。

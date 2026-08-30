@@ -1,10 +1,8 @@
-# Code signing policy
+# Deferred code signing policy
 
 ## Current status
 
-War Thunder UID Guard is applying for the SignPath Foundation open-source code-signing program. Releases up to and including v0.6.3 are unsigned. No release may be described as signed until its Authenticode signature has been verified successfully.
-
-Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+Trusted Authenticode signing is currently deferred. Public releases are unsigned and may trigger Windows SmartScreen. This document is retained as a proposed policy for a future signing rollout; no release may be described as signed until its Authenticode signature has been verified successfully.
 
 ## Project
 
@@ -34,7 +32,7 @@ Only `WarThunderUIDGuard.exe` built from this repository by `.github/workflows/r
 5. The workflow verifies a valid timestamped signature issued by SignPath Foundation before packaging.
 6. SHA-256 checksums and server-signed updater metadata are generated only from the final signed package.
 
-The release workflow deliberately fails if SignPath configuration is absent or if signature verification fails. It does not silently publish an unsigned replacement.
+If trusted signing is enabled later, the release workflow must fail when its signing configuration is absent or signature verification fails. Until then, the active workflow intentionally produces unsigned packages and labels them accordingly.
 
 Maintainer setup instructions are documented in [SIGNPATH_SETUP.md](SIGNPATH_SETUP.md).
 

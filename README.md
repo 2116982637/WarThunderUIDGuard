@@ -1,4 +1,4 @@
-# War Thunder UID Guard v0.6.3 Safe
+# War Thunder UID Guard v0.7.0 Safe
 
 Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵称历史监听 War Thunder 的公开本地接口 `127.0.0.1:8111`。
 
@@ -60,13 +60,9 @@ War Thunder 的 8111 接口不会提供对局完整名单，也不会提供参�
 dotnet publish -c Release -r win-x64 --self-contained false
 ```
 
-## Code signing policy
+## Code signing status
 
-项目正在申请 SignPath Foundation 的免费开源代码签名。v0.6.3 及以前版本没有 Authenticode 签名，因此 Windows 可能显示“未知发布者”。批准后的正式 Windows 版本只允许由 GitHub 托管运行器从公开标签构建，经 SignPath 审批签名并验证成功后发布；发布流程不会在签名缺失时静默回退到未签名包。
-
-Free code signing provided by SignPath.io, certificate by SignPath Foundation.
-
-维护者、审核者和签名批准人均为 [@elainasamae](https://github.com/elainasamae)。完整规则见 [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)，批准后的配置步骤见 [SIGNPATH_SETUP.md](SIGNPATH_SETUP.md)。
+当前发布版本暂不采用 Authenticode 可信发布者签名，因此 Windows 可能显示“未知发布者”或 SmartScreen 提醒。安装包仍由 GitHub Actions 从公开版本标签构建，并提供 SHA-256；程序内更新还会验证服务器签名的版本元数据与文件哈希。可信代码签名方案已暂缓，以后需要时可参考 [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) 和 [SIGNPATH_SETUP.md](SIGNPATH_SETUP.md) 重新启用。
 
 ## 同步服务器
 
