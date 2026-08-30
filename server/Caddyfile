@@ -10,6 +10,17 @@
         X-Content-Type-Options "nosniff"
     }
 
+    @adminUpload {
+        method POST
+        path /admin/upload
+    }
+    handle @adminUpload {
+        request_body {
+            max_size 1MB
+        }
+        reverse_proxy 127.0.0.1:8090
+    }
+
     @blacklist path /blacklist.json /blacklist.sig /signing-public.xml
     handle @blacklist {
         file_server

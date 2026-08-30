@@ -217,7 +217,7 @@ public sealed class MainForm : Form
         simulate.Size = new Size(96, 30);
         simulate.Click += (_, _) => Simulate();
         ConfigureToolbarButton(_uploadOneDriveButton, "Button.UploadOneDrive", Color.FromArgb(33, 150, 83));
-        _uploadOneDriveButton.Click += (_, _) => UploadToOneDrive();
+        _uploadOneDriveButton.Click += async (_, _) => await UploadToServerAsync();
         ConfigureToolbarButton(_pullOneDriveButton, "Button.PullOneDrive", Color.FromArgb(45, 108, 223));
         _pullOneDriveButton.Click += async (_, _) => await PullFromOneDriveAsync();
         ConfigureToolbarButton(_syncNicknameButton, "Button.SyncNickname", Color.FromArgb(29, 125, 140));
@@ -451,13 +451,28 @@ public sealed class MainForm : Form
         UpdateOneDriveSyncUi();
     }
 
-    private void UploadToOneDrive()
+    private async Task UploadToServerAsync()
     {
-        if (!_data.OneDriveSyncEnabled) return;
-        var result = _store.UploadToOneDrive(_data);
-        _data = result.Data;
-        if (result.Changed) RefreshGrid();
-        UpdateOneDriveSyncUi();
+        if (!_data.OneDriveSyncEnabled || _oneDriveBusy) return;
+        var password = UploadPasswordDialog.Request(this);
+        if (password is null) return;
+
+        _oneDriveBusy = true;
+        try
+        {
+            var uploadTask = _store.UploadToServerAsync(_data, password);
+            password = "";
+            UpdateOneDriveSyncUi();
+            var result = await uploadTask;
+            _data = result.Data;
+            if (result.Changed) RefreshGrid();
+        }
+        finally
+        {
+            password = "";
+            _oneDriveBusy = false;
+            UpdateOneDriveSyncUi();
+        }
     }
 
     private async Task PullFromOneDriveAsync()
@@ -739,8 +754,12 @@ public sealed class MainForm : Form
         _oneDriveSync.Text = Localizer.T(status switch
         {
             OneDriveSyncStatus.Ready => "OneDrive.Ready",
+            OneDriveSyncStatus.Uploading => "OneDrive.Uploading",
             OneDriveSyncStatus.Pulling => "OneDrive.Pulling",
             OneDriveSyncStatus.Uploaded => "OneDrive.Uploaded",
+            OneDriveSyncStatus.UploadUnauthorized => "OneDrive.UploadUnauthorized",
+            OneDriveSyncStatus.UploadConflict => "OneDrive.UploadConflict",
+            OneDriveSyncStatus.UploadRateLimited => "OneDrive.UploadRateLimited",
             OneDriveSyncStatus.Pulled => "OneDrive.Pulled",
             OneDriveSyncStatus.Cached => "OneDrive.Cached",
             OneDriveSyncStatus.Unavailable => "OneDrive.Unavailable",
@@ -750,13 +769,16 @@ public sealed class MainForm : Form
         _oneDriveSync.ForeColor = status switch
         {
             OneDriveSyncStatus.Uploaded or OneDriveSyncStatus.Pulled => Color.SeaGreen,
+            OneDriveSyncStatus.Uploading => Color.FromArgb(45, 108, 223),
             OneDriveSyncStatus.Cached => Color.DarkOrange,
             OneDriveSyncStatus.Pulling => Color.FromArgb(45, 108, 223),
             OneDriveSyncStatus.Unavailable => Color.DarkOrange,
+            OneDriveSyncStatus.UploadConflict or OneDriveSyncStatus.UploadRateLimited => Color.DarkOrange,
+            OneDriveSyncStatus.UploadUnauthorized => Color.Firebrick,
             OneDriveSyncStatus.Error => Color.Firebrick,
             _ => Color.DimGray
         };
-        _uploadOneDriveButton.Enabled = _data.OneDriveSyncEnabled && !_oneDriveBusy && _store.OneDriveDataFile is not null;
+        _uploadOneDriveButton.Enabled = _data.OneDriveSyncEnabled && !_oneDriveBusy;
         _pullOneDriveButton.Enabled = _data.OneDriveSyncEnabled && !_oneDriveBusy;
         PositionHeaderControls();
     }

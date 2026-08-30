@@ -6,6 +6,7 @@ $root = 'C:\ProgramData\WarThunderUIDGuardSync'
 $www = Join-Path $root 'www'
 $updates = Join-Path $www 'updates'
 $utf8 = New-Object Text.UTF8Encoding($false)
+$dataMutex = New-Object Threading.Mutex($false, 'Global\WTUIDGuardDataWrite')
 New-Item -ItemType Directory -Path $updates -Force | Out-Null
 
 function Get-RemoteFile {
@@ -51,17 +52,26 @@ function Write-Signature {
     Write-Utf8NoBom -Path $Destination -Text ([Convert]::ToBase64String($signature))
 }
 
+$mutexHeld = $dataMutex.WaitOne([TimeSpan]::FromSeconds(60))
+if (-not $mutexHeld) {
+    throw 'Timed out waiting for the blacklist write lock.'
+}
+
 try {
     $blacklistPath = Join-Path $www 'blacklist.json'
-    Get-RemoteFile -Urls @(
-        'https://gcore.jsdelivr.net/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json',
-        'https://fastly.jsdelivr.net/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json',
-        'https://cdn.jsdelivr.net/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json',
-        'https://raw.githubusercontent.com/elainasamae/WarThunderUIDGuard/main/data/blacklist.json'
-    ) -Destination $blacklistPath -MaximumBytes 1048576
+    if (-not (Test-Path -LiteralPath $blacklistPath)) {
+        Get-RemoteFile -Urls @(
+            'https://gcore.jsdelivr.net/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json',
+            'https://fastly.jsdelivr.net/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json',
+            'https://cdn.jsdelivr.net/gh/elainasamae/WarThunderUIDGuard@main/data/blacklist.json',
+            'https://raw.githubusercontent.com/elainasamae/WarThunderUIDGuard/main/data/blacklist.json'
+        ) -Destination $blacklistPath -MaximumBytes 1048576
+    }
     $blacklist = Get-Content -LiteralPath $blacklistPath -Raw | ConvertFrom-Json
     if ($null -eq $blacklist.Players) { throw 'Blacklist JSON has no Players array.' }
     Write-Signature -Source $blacklistPath -Destination (Join-Path $www 'blacklist.sig')
+    $dataMutex.ReleaseMutex()
+    $mutexHeld = $false
 
     $release = Invoke-RestMethod -UseBasicParsing `
         -Uri 'https://api.github.com/repos/elainasamae/WarThunderUIDGuard/releases/latest' `
@@ -121,4 +131,6 @@ try {
 finally {
     $rsa.Dispose()
     [Array]::Clear($encrypted, 0, $encrypted.Length)
+    if ($mutexHeld) { $dataMutex.ReleaseMutex() }
+    $dataMutex.Dispose()
 }

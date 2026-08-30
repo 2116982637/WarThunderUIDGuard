@@ -117,6 +117,8 @@ internal static class SelfTest
         Assert(Localizer.HasTranslation("Status.ConnectionFailed"), "connection failure is translated");
         Assert(Localizer.HasTranslation("OneDrive.Pulled"), "OneDrive pull status is translated");
         Assert(Localizer.HasTranslation("OneDrive.Uploaded"), "OneDrive upload status is translated");
+        Assert(Localizer.HasTranslation("OneDrive.Uploading"), "administrator upload progress is translated");
+        Assert(Localizer.HasTranslation("OneDrive.UploadUnauthorized"), "administrator upload rejection is translated");
         Assert(Localizer.HasTranslation("OneDrive.Cached"), "offline cache status is translated");
         Assert(Localizer.HasTranslation("Button.UploadOneDrive"), "OneDrive upload button is translated");
         Assert(Localizer.HasTranslation("Button.PullOneDrive"), "OneDrive pull button is translated");
@@ -141,6 +143,40 @@ internal static class SelfTest
             "other ports on the signed server are blocked");
         Assert(SignedBlacklistClient.ComputePinnedPublicKeyHash() == SignedBlacklistClient.PublicKeySha256,
             "the embedded signed-server public key matches its pinned hash");
+        Assert(AdminUploadClient.IsUploadUri(new Uri(AdminUploadClient.UploadUrl)),
+            "the exact administrator upload endpoint is allowed");
+        Assert(!AdminUploadClient.IsUploadUri(new Uri("http://39.105.200.142:8443/admin/other")),
+            "other administrator endpoints are blocked");
+        var uploadKey = AdminUploadClient.DeriveKey("self-test-password-1234567890");
+        try
+        {
+            var uploadBody = System.Text.Encoding.UTF8.GetBytes("{\"SchemaVersion\":2}");
+            var uploadMac = AdminUploadClient.CreateAuthorization(
+                uploadBody,
+                new string('A', 64),
+                "1700000000",
+                new string('B', 32),
+                uploadKey);
+            Assert(uploadMac == AdminUploadClient.CreateAuthorization(
+                    uploadBody,
+                    new string('A', 64),
+                    "1700000000",
+                    new string('B', 32),
+                    uploadKey),
+                "administrator upload authentication is deterministic");
+            uploadBody[0] ^= 1;
+            Assert(uploadMac != AdminUploadClient.CreateAuthorization(
+                    uploadBody,
+                    new string('A', 64),
+                    "1700000000",
+                    new string('B', 32),
+                    uploadKey),
+                "administrator upload authentication binds the request body");
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(uploadKey);
+        }
         Assert(SignedBlacklistClient.IsUpdateMetadataUri(new Uri(SignedBlacklistClient.UpdateMetadataUrl)),
             "the exact signed update metadata endpoint is allowed");
         Assert(SignedBlacklistClient.IsUpdateSignatureUri(new Uri(SignedBlacklistClient.UpdateSignatureUrl)),

@@ -136,6 +136,45 @@ public sealed class DataStore
         }
     }
 
+    public async Task<OneDriveSyncResult> UploadToServerAsync(
+        AppData local,
+        string password,
+        CancellationToken cancellationToken = default)
+    {
+        if (!local.OneDriveSyncEnabled)
+        {
+            OneDriveStatus = OneDriveSyncStatus.Disabled;
+            return new OneDriveSyncResult(local, OneDriveStatus, false);
+        }
+
+        OneDriveStatus = OneDriveSyncStatus.Uploading;
+        LastOneDriveError = null;
+        try
+        {
+            var uploaded = await AdminUploadClient.UploadAsync(local, password, cancellationToken);
+            var changed = !Equivalent(local, uploaded);
+            BackupLocalFile();
+            WriteAtomic(DataFile, uploaded);
+            OneDriveStatus = OneDriveSyncStatus.Uploaded;
+            return new OneDriveSyncResult(uploaded, OneDriveStatus, changed);
+        }
+        catch (AdminUploadException ex)
+        {
+            var status = ex.Failure switch
+            {
+                AdminUploadFailure.Unauthorized => OneDriveSyncStatus.UploadUnauthorized,
+                AdminUploadFailure.Conflict => OneDriveSyncStatus.UploadConflict,
+                AdminUploadFailure.RateLimited => OneDriveSyncStatus.UploadRateLimited,
+                _ => OneDriveSyncStatus.Error
+            };
+            return SetSyncFailure(local, status, ex);
+        }
+        catch (Exception ex)
+        {
+            return SetSyncFailure(local, OneDriveSyncStatus.Error, ex);
+        }
+    }
+
     public async Task<OneDriveSyncResult> PullFromOneDriveAsync(
         AppData local,
         CancellationToken cancellationToken = default)
@@ -436,8 +475,12 @@ public enum OneDriveSyncStatus
 {
     Disabled,
     Ready,
+    Uploading,
     Pulling,
     Uploaded,
+    UploadUnauthorized,
+    UploadConflict,
+    UploadRateLimited,
     Pulled,
     Cached,
     Unavailable,
