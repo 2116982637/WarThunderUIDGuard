@@ -47,8 +47,22 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item -LiteralPath LICENSE -Destination artifacts/app/LICENSE.txt
+          Copy-Item -LiteralPath THIRD_PARTY_NOTICES.md -Destination artifacts/app/THIRD_PARTY_NOTICES.md
           Copy-Item -LiteralPath PRIVACY.md -Destination artifacts/app/PRIVACY.md
           Copy-Item -LiteralPath SECURITY.md -Destination artifacts/app/SECURITY.md
+
+          $runtimePackRoot = Join-Path $env:USERPROFILE `
+            '.nuget\packages\microsoft.netcore.app.runtime.win-x64'
+          $runtimePack = Get-ChildItem -LiteralPath $runtimePackRoot -Directory |
+            Sort-Object { [version]$_.Name } -Descending |
+            Select-Object -First 1
+          if ($null -eq $runtimePack) {
+            throw 'The .NET runtime license pack was not restored.'
+          }
+          Copy-Item -LiteralPath (Join-Path $runtimePack.FullName 'LICENSE.TXT') `
+            -Destination artifacts/app/DOTNET-RUNTIME-LICENSE.txt
+          Copy-Item -LiteralPath (Join-Path $runtimePack.FullName 'THIRD-PARTY-NOTICES.TXT') `
+            -Destination artifacts/app/DOTNET-RUNTIME-THIRD-PARTY-NOTICES.txt
 
       - name: Package and checksum
         shell: pwsh

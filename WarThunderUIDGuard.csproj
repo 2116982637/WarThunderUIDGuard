@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>WarThunderUIDGuard</AssemblyName>
     <RootNamespace>WarThunderUIDGuard</RootNamespace>
-    <Version>0.7.1</Version>
+    <Version>0.7.2</Version>
     <Authors>elainasamae</Authors>
     <Company>elainasamae</Company>
     <AssemblyTitle>War Thunder UID Guard</AssemblyTitle>
@@ -15,6 +15,10 @@
     <Description>Safe local UID blacklist monitor for War Thunder.</Description>
     <Copyright>Copyright (c) 2026 elainasamae</Copyright>
     <RepositoryUrl>https://github.com/elainasamae/WarThunderUIDGuard</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/elainasamae/WarThunderUIDGuard</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
   <ItemGroup>

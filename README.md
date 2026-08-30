@@ -1,8 +1,8 @@
-# War Thunder UID Guard v0.7.1 Safe
+# War Thunder UID Guard v0.7.2 Safe
 
 Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵称历史监听 War Thunder 的公开本地接口 `127.0.0.1:8111`。
 
-本项目采用 [MIT License](LICENSE) 开源。隐私与网络访问范围见 [PRIVACY.md](PRIVACY.md)。
+本项目自主编写的代码采用 [MIT License](LICENSE) 开源。第三方组件继续遵循各自的许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；隐私与网络访问范围见 [PRIVACY.md](PRIVACY.md)。
 
 ## 能做什么
 
