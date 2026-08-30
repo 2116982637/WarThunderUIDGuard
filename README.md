@@ -2,6 +2,8 @@
 
 Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵称历史监听 War Thunder 的公开本地接口 `127.0.0.1:8111`。
 
+本项目采用 [MIT License](LICENSE) 开源。隐私与网络访问范围见 [PRIVACY.md](PRIVACY.md)。
+
 ## 能做什么
 
 - UID 作为记录主键，保存玩家昵称与备注；手动编辑时可填写多个已知昵称。
@@ -59,6 +61,14 @@ OneDrive 文件写入成功后由 OneDrive 客户端负责上传；公开 GitHub
 ```powershell
 dotnet publish -c Release -r win-x64 --self-contained false
 ```
+
+## Code signing policy
+
+项目正在申请 SignPath Foundation 的免费开源代码签名。v0.6.3 及以前版本没有 Authenticode 签名，因此 Windows 可能显示“未知发布者”。批准后的正式 Windows 版本只允许由 GitHub 托管运行器从公开标签构建，经 SignPath 审批签名并验证成功后发布；发布流程不会在签名缺失时静默回退到未签名包。
+
+Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+
+维护者、审核者和签名批准人均为 [@elainasamae](https://github.com/elainasamae)。完整规则见 [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)，批准后的配置步骤见 [SIGNPATH_SETUP.md](SIGNPATH_SETUP.md)。
 
 ## 同步服务器
 

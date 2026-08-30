@@ -8,6 +8,13 @@
     <AssemblyName>WarThunderUIDGuard</AssemblyName>
     <RootNamespace>WarThunderUIDGuard</RootNamespace>
     <Version>0.6.3</Version>
+    <Authors>elainasamae</Authors>
+    <Company>elainasamae</Company>
+    <AssemblyTitle>War Thunder UID Guard</AssemblyTitle>
+    <Product>War Thunder UID Guard</Product>
+    <Description>Safe local UID blacklist monitor for War Thunder.</Description>
+    <Copyright>Copyright (c) 2026 elainasamae</Copyright>
+    <RepositoryUrl>https://github.com/elainasamae/WarThunderUIDGuard</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>

@@ -28,6 +28,10 @@ War Thunder UID Guard v0.6.3 对游戏采用“本地只读”设计。
 
 提醒通过 Windows 通知区域完成，不绘制游戏内覆盖层。
 
+## 发布签名
+
+项目的 Authenticode 签名状态和受信任发布流程见 [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)。只有签名状态为 `Valid` 且签名者为 SignPath Foundation 的发布包才能标记为已签名；SHA-256 校验不能替代发布者身份签名。
+
 ## 保证范围
 
 以上内容是对本项目代码行为的技术保证，不代表 Gaijin Entertainment 或 BattlEye 的官方批准，也无法替代其最新规则。使用前请自行确认当前适用条款。
