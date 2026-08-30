@@ -92,7 +92,7 @@ internal static class AutoUpdater
         int parentProcessId,
         CancellationToken cancellationToken)
     {
-        var installDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        var installDirectory = ResolveInstallDirectory(Environment.ProcessPath);
         EnsureDirectoryIsWritable(installDirectory);
 
         var workDirectory = Path.Combine(
@@ -151,8 +151,10 @@ internal static class AutoUpdater
 
             ExtractArchiveSafely(archivePath, stagingDirectory);
             var executableName = Path.GetFileName(Environment.ProcessPath) ?? "WarThunderUIDGuard.exe";
-            if (!File.Exists(Path.Combine(stagingDirectory, executableName)))
+            var stagedExecutable = Path.Combine(stagingDirectory, executableName);
+            if (!File.Exists(stagedExecutable))
                 throw new InvalidDataException("The update archive does not contain the application executable.");
+            ValidateExecutableVersion(stagedExecutable, release.Version);
 
             var failureLog = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -183,6 +185,7 @@ internal static class AutoUpdater
             startInfo.ArgumentList.Add(stagingDirectory);
             startInfo.ArgumentList.Add(installDirectory);
             startInfo.ArgumentList.Add(executableName);
+            startInfo.ArgumentList.Add(NormalizeVersion(release.Version).ToString(4));
             startInfo.ArgumentList.Add(workDirectory);
             startInfo.ArgumentList.Add(failureLog);
 
@@ -336,6 +339,29 @@ internal static class AutoUpdater
             throw new InvalidDataException("The update archive attempted to write outside its staging directory.");
         return destination;
     }
+
+    internal static string ResolveInstallDirectory(string? processPath)
+    {
+        var executablePath = string.IsNullOrWhiteSpace(processPath)
+            ? throw new InvalidOperationException("The running executable path is unavailable.")
+            : Path.GetFullPath(processPath);
+        return Path.GetDirectoryName(executablePath)?.TrimEnd(Path.DirectorySeparatorChar)
+            ?? throw new InvalidOperationException("The application directory is unavailable.");
+    }
+
+    internal static void ValidateExecutableVersion(string executablePath, Version expectedVersion)
+    {
+        var versionText = FileVersionInfo.GetVersionInfo(executablePath).FileVersion;
+        if (!Version.TryParse(versionText, out var actualVersion) || actualVersion is null ||
+            NormalizeVersion(actualVersion) != NormalizeVersion(expectedVersion))
+            throw new InvalidDataException("The update executable version does not match its release metadata.");
+    }
+
+    private static Version NormalizeVersion(Version version) => new(
+        version.Major,
+        version.Minor,
+        Math.Max(version.Build, 0),
+        Math.Max(version.Revision, 0));
 
     internal static string? TakeInstallerFailure()
     {
@@ -517,6 +543,7 @@ internal static class AutoUpdater
             [Parameter(Mandatory=$true)][string]$StagingDirectory,
             [Parameter(Mandatory=$true)][string]$InstallDirectory,
             [Parameter(Mandatory=$true)][string]$ExecutableName,
+            [Parameter(Mandatory=$true)][version]$ExpectedVersion,
             [Parameter(Mandatory=$true)][string]$WorkDirectory,
             [Parameter(Mandatory=$true)][string]$FailureLog
         )
@@ -559,8 +586,14 @@ internal static class AutoUpdater
                 $item.Installed = $true
             }
 
+            $installedExecutable = Join-Path $InstallDirectory $ExecutableName
+            $installedVersion = [version][Diagnostics.FileVersionInfo]::GetVersionInfo($installedExecutable).FileVersion
+            if ($installedVersion -ne $ExpectedVersion) {
+                throw "The installed executable version $installedVersion does not match $ExpectedVersion."
+            }
+
             Remove-Item -LiteralPath $FailureLog -Force -ErrorAction SilentlyContinue
-            Start-Process -FilePath (Join-Path $InstallDirectory $ExecutableName) -WorkingDirectory $InstallDirectory
+            Start-Process -FilePath $installedExecutable -WorkingDirectory $InstallDirectory
             Start-Sleep -Seconds 2
             foreach ($item in $items) {
                 Remove-Item -LiteralPath $item.OldPath -Force -ErrorAction SilentlyContinue

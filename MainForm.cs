@@ -67,7 +67,7 @@ public sealed class MainForm : Form
                 MessageBoxIcon.Warning);
 
         _tray.Icon = SystemIcons.Shield;
-        _tray.Text = "War Thunder UID Guard";
+        _tray.Text = $"War Thunder UID Guard v{AutoUpdater.CurrentVersion}";
         _tray.Visible = true;
         _tray.BalloonTipClicked += (_, _) =>
         {
@@ -683,7 +683,7 @@ public sealed class MainForm : Form
 
     private void ApplyLocalization()
     {
-        Text = Localizer.T("App.Title");
+        Text = Localizer.F("App.Title", AutoUpdater.CurrentVersion);
         ApplyTaggedText(this);
         _uid.PlaceholderText = Localizer.T("Placeholder.Uid");
         _aliases.PlaceholderText = Localizer.T("Placeholder.Aliases");

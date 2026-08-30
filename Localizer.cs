@@ -12,7 +12,7 @@ public static class Localizer
 {
     private static readonly IReadOnlyDictionary<string, string> Chinese = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.6.3 Safe",
+        ["App.Title"] = "War Thunder UID Guard  v{0} Safe",
         ["Label.Language"] = "语言",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "昵称",
@@ -35,7 +35,7 @@ public static class Localizer
         ["Update.Checking"] = "正在检查更新…",
         ["Update.UpToDate"] = "已是最新版本",
         ["Update.Downloading"] = "正在下载并校验更新 {0}…",
-        ["Update.Restarting"] = "已安装更新 {0}，正在重启…",
+        ["Update.Restarting"] = "已下载更新 {0}，正在替换当前目录文件并重启…",
         ["Update.Failed"] = "自动更新失败，当前版本未修改",
         ["Update.InstallFailed"] = "更新安装失败，已恢复原版本",
         ["OneDrive.Disabled"] = "远程手动同步",
@@ -102,7 +102,7 @@ public static class Localizer
 
     private static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
     {
-        ["App.Title"] = "War Thunder UID Guard  v0.6.3 Safe",
+        ["App.Title"] = "War Thunder UID Guard  v{0} Safe",
         ["Label.Language"] = "Language",
         ["Label.Uid"] = "UID",
         ["Label.Nickname"] = "Nickname",
@@ -125,7 +125,7 @@ public static class Localizer
         ["Update.Checking"] = "Checking for updates…",
         ["Update.UpToDate"] = "This is the latest version",
         ["Update.Downloading"] = "Downloading and verifying update {0}…",
-        ["Update.Restarting"] = "Update {0} installed; restarting…",
+        ["Update.Restarting"] = "Update {0} downloaded; replacing files in this folder and restarting…",
         ["Update.Failed"] = "Automatic update failed; the current version was not changed",
         ["Update.InstallFailed"] = "Update installation failed; the previous version was restored",
         ["OneDrive.Disabled"] = "Manual remote sync",

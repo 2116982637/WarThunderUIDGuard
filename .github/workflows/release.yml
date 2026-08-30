@@ -46,6 +46,7 @@ jobs:
       - name: Add license and privacy notices
         shell: pwsh
         run: |
+          ($env:RELEASE_TAG -replace '^v', '') | Set-Content -LiteralPath artifacts/app/VERSION.txt -Encoding ascii
           Copy-Item -LiteralPath LICENSE -Destination artifacts/app/LICENSE.txt
           Copy-Item -LiteralPath THIRD_PARTY_NOTICES.md -Destination artifacts/app/THIRD_PARTY_NOTICES.md
           Copy-Item -LiteralPath PRIVACY.md -Destination artifacts/app/PRIVACY.md

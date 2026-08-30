@@ -286,6 +286,13 @@ internal static class SelfTest
         var archiveRoot = Path.Combine(Path.GetTempPath(), "WTUIDGuard-update-root");
         Assert(AutoUpdater.ValidateArchiveEntryPath(archiveRoot, "WarThunderUIDGuard.exe") ==
                Path.Combine(archiveRoot, "WarThunderUIDGuard.exe"), "safe archive paths remain inside staging");
+        Assert(AutoUpdater.ResolveInstallDirectory(@"C:\Apps\WTUIDGuard\WarThunderUIDGuard.exe") ==
+               @"C:\Apps\WTUIDGuard", "updates target the running executable directory");
+        AutoUpdater.ValidateExecutableVersion(Environment.ProcessPath!, AutoUpdater.CurrentVersion);
+        var wrongExecutableVersionBlocked = false;
+        try { AutoUpdater.ValidateExecutableVersion(Environment.ProcessPath!, new Version(99, 0, 0)); }
+        catch (InvalidDataException) { wrongExecutableVersionBlocked = true; }
+        Assert(wrongExecutableVersionBlocked, "an update executable with the wrong version is blocked");
         var traversalBlocked = false;
         try { AutoUpdater.ValidateArchiveEntryPath(archiveRoot, "../outside.exe"); }
         catch (InvalidDataException) { traversalBlocked = true; }
