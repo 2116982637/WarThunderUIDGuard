@@ -515,7 +515,13 @@ internal static class AutoUpdater
         long maximumBytes,
         CancellationToken cancellationToken)
     {
-        using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+        using var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            // Keep GitHub/CDN sources compatible with the user's proxy, but the
+            // pinned first-party mirror must remain a direct connection.
+            UseProxy = !SignedBlacklistClient.IsUpdateArchiveUri(initialUri)
+        };
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(5) };
         var uri = initialUri;
         for (var redirect = 0; redirect <= RedirectLimit; redirect++)

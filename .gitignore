@@ -8,6 +8,8 @@ obj/
 *.zip
 artifacts/
 cloud/
+__pycache__/
+*.py[cod]
 
 # Local administrator credentials. Never commit these files.
 local-secrets/

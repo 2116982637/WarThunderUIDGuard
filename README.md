@@ -1,4 +1,4 @@
-# War Thunder UID Guard v0.8.0
+# War Thunder UID Guard v0.8.1
 
 Windows 桌面伴侣程序，用 UID 保存本地黑名单，并通过玩家昵称历史监听 War Thunder 的公开本地接口 `127.0.0.1:8111`。
 
@@ -36,6 +36,8 @@ War Thunder 的 8111 接口不会提供对局完整名单，也不会提供参�
 
 “拉取同步”会优先尝试专用只读服务器 `http://39.105.200.142:8443/blacklist.json`，客户端必须使用内置 RSA-3072 公钥验证配套签名，验签失败的数据一律拒绝。随后并发尝试 GitHub Raw、Gcore、Fastly 和 jsDelivr 四条 HTTPS 后备线路，每条线路自动重试，任意一条成功就立即继续；全部网络线路暂时不可用时使用上次成功下载的本地缓存。拉取时服务器对远程 UID 的存在状态具有优先权：即使本机曾删除该 UID，只要服务器仍保留它，再次拉取就会恢复；服务器发布的删除记录仍会生效。服务器黑名单是权威副本，定时任务只维护签名和更新镜像，不会再用 GitHub 的旧数据覆盖管理员上传；仅在服务器文件缺失时才从公开仓库引导恢复。
 
+固定 IP 的专用服务器请求会绕过 Windows 系统代理直连，避免本机代理把内网式 HTTP 地址阻断；GitHub 与 CDN 后备仍遵循用户的正常网络代理设置。
+
 “管理员上传”会先拉取并验证服务器当前数据，再按 UID 和更新时间合并。管理员密码只在本次操作的遮罩输入框中使用，不会保存或通过网络发送；客户端使用 PBKDF2-SHA256 派生认证密钥，再用 HMAC-SHA256 绑定请求时间戳、随机数、服务器基础版本和完整文件哈希。服务器拒绝过期请求、重复随机数、旧版本覆盖、错误密码、超限频率和无效 JSON，并在原子替换前保存备份和生成新的 RSA-3072 数据签名。
 
 服务器是公共黑名单的权威来源。GitHub/CDN 镜像仍作为拉取后备，但管理员上传不会依赖 OneDrive。多台电脑合并时以 UID 为主键，以更新时间较新的昵称列表、备注或删除操作为准。远程文件上限为 1 MB；签名或 JSON 验证失败时不会覆盖本地数据。
@@ -66,7 +68,7 @@ dotnet publish -c Release -r win-x64 --self-contained false
 
 ## 同步服务器
 
-仓库中的 `server` 目录保存当前镜像服务器、管理员上传端点及刷新脚本的公开配置，便于重建及审计。服务器私钥和管理员认证密钥不会提交到仓库；它们使用 Windows DPAPI 的 `LocalMachine` 范围加密，并限制为 `SYSTEM` 与服务器管理员读取。上传服务作为无执行时限、失败自动重启的 `SYSTEM` 计划任务运行。服务器数据位于 `C:\ProgramData\WarThunderUIDGuardSync\www\blacklist.json`，上传前备份位于 `C:\ProgramData\WarThunderUIDGuardSync\upload-backups`，不记录密码的审计日志位于 `C:\ProgramData\WarThunderUIDGuardSync\admin-upload.log`。
+仓库中的 `server/linux` 目录保存当前 Linux 镜像服务器、管理员上传端点、Nginx 配置及定时刷新服务，便于重建和审计；`server` 根目录中的 Windows 脚本只作为旧服务器迁移参考。生产数据位于 `/srv/wtuidguard/www`，上传备份位于 `/var/lib/wtuidguard/upload-backups`，不记录密码或正文的审计日志位于 `/var/log/wtuidguard/admin-upload.log`。服务以受限的 `wtuidguard` 用户运行，并使用 systemd 沙箱；管理员 HMAC 密钥和 RSA 私钥仅保存在 `/etc/wtuidguard/secrets`，不会提交到 GitHub。
 
 ## 合规说明
 

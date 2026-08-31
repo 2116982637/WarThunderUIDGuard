@@ -85,7 +85,10 @@ internal static class SignedBlacklistClient
         using var handler = new HttpClientHandler
         {
             AllowAutoRedirect = false,
-            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+            // These endpoints are a pinned IP and signature-verified. A desktop
+            // proxy can otherwise intercept or black-hole the private server path.
+            UseProxy = false
         };
         using var client = new HttpClient(handler);
         var dataTask = FetchBytesAsync(client, dataUri, maximumBytes, timeout.Token);

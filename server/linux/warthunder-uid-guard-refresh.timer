@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh WarThunder UID Guard content every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=5min
+RandomizedDelaySec=20s
+AccuracySec=10s
+Unit=warthunder-uid-guard-refresh.service
+
+[Install]
+WantedBy=timers.target
