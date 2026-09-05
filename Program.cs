@@ -30,6 +30,16 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--self-test-latency", StringComparer.OrdinalIgnoreCase))
+        {
+            using var probe = new ServerLatencyProbe();
+            var result = probe.MeasureAsync(default).GetAwaiter().GetResult();
+            if (result.Status != ServerLatencyStatus.Online)
+                throw new HttpRequestException($"Latency probe failed: {result.Status}");
+            Console.WriteLine($"LATENCY SELF-TEST OK ({result.Milliseconds} ms)");
+            return;
+        }
+
         if (AutoUpdater.TryLaunchVersionDirectoryRename(Environment.ProcessId))
             return;
 

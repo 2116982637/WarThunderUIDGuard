@@ -115,6 +115,10 @@ internal static class SelfTest
         }
         Assert(Localizer.TranslationSetsMatch(), "Chinese and English translation keys match");
         Assert(Localizer.HasTranslation("Status.ConnectionFailed"), "connection failure is translated");
+        Assert(Localizer.HasTranslation("ServerLatency.Checking"), "latency checking status is translated");
+        Assert(Localizer.HasTranslation("ServerLatency.Value"), "latency value is translated");
+        Assert(Localizer.HasTranslation("ServerLatency.Timeout"), "latency timeout is translated");
+        Assert(Localizer.HasTranslation("ServerLatency.Offline"), "latency offline status is translated");
         Assert(Localizer.HasTranslation("OneDrive.Pulled"), "OneDrive pull status is translated");
         Assert(Localizer.HasTranslation("OneDrive.Uploaded"), "OneDrive upload status is translated");
         Assert(Localizer.HasTranslation("OneDrive.Uploading"), "administrator upload progress is translated");
@@ -141,12 +145,75 @@ internal static class SelfTest
         Assert(DataStore.IsAllowedRemoteUri(new Uri(DataStore.PublicBlacklistFastlyUrl)), "the exact Fastly data mirror is allowed");
         Assert(SignedBlacklistClient.IsDataUri(new Uri(SignedBlacklistClient.DataUrl)),
             "the exact signed server data endpoint is allowed");
+        Assert(SignedBlacklistClient.IsHealthUri(new Uri(SignedBlacklistClient.HealthUrl)),
+            "the exact server health endpoint is allowed");
+        Assert(!SignedBlacklistClient.IsHealthUri(new Uri("http://39.105.200.142:8443/blacklist.json")),
+            "the blacklist endpoint is not accepted as a latency endpoint");
         Assert(!SignedBlacklistClient.IsDataUri(new Uri("http://39.105.200.142:8443/other.json")),
             "other paths on the signed server are blocked");
         Assert(!SignedBlacklistClient.IsDataUri(new Uri("http://39.105.200.142:8080/blacklist.json")),
             "other ports on the signed server are blocked");
         Assert(SignedBlacklistClient.ComputePinnedPublicKeyHash() == SignedBlacklistClient.PublicKeySha256,
             "the embedded signed-server public key matches its pinned hash");
+        HttpMethod? latencyMethod = null;
+        Uri? latencyUri = null;
+        using (var latencyProbe = new ServerLatencyProbe(
+                   new DelegateHttpMessageHandler((request, _) =>
+                   {
+                       latencyMethod = request.Method;
+                       latencyUri = request.RequestUri;
+                       return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+                   }),
+                   new Uri(SignedBlacklistClient.HealthUrl),
+                   TimeSpan.FromSeconds(1)))
+        {
+            var latency = latencyProbe.MeasureAsync(default).GetAwaiter().GetResult();
+            Assert(latency.Status == ServerLatencyStatus.Online && latency.Milliseconds >= 1,
+                "server latency probe reports a successful response");
+        }
+        Assert(latencyMethod == HttpMethod.Head, "server latency probe uses a bodyless HEAD request");
+        Assert(latencyUri?.AbsoluteUri == SignedBlacklistClient.HealthUrl,
+            "server latency probe targets the exact no-log health endpoint");
+        using (var unavailableProbe = new ServerLatencyProbe(
+                   new DelegateHttpMessageHandler((_, _) => Task.FromResult(
+                       new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable))),
+                   new Uri(SignedBlacklistClient.HealthUrl),
+                   TimeSpan.FromSeconds(1)))
+        {
+            Assert(unavailableProbe.MeasureAsync(default).GetAwaiter().GetResult().Status ==
+                   ServerLatencyStatus.Unavailable,
+                "server latency probe reports non-success responses as unavailable");
+        }
+        using (var timeoutProbe = new ServerLatencyProbe(
+                   new DelegateHttpMessageHandler(async (_, token) =>
+                   {
+                       await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                       return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+                   }),
+                   new Uri(SignedBlacklistClient.HealthUrl),
+                   TimeSpan.FromMilliseconds(20)))
+        {
+            Assert(timeoutProbe.MeasureAsync(default).GetAwaiter().GetResult().Status ==
+                   ServerLatencyStatus.TimedOut,
+                "server latency probe distinguishes a timeout");
+        }
+        var callerCancellationPropagated = false;
+        using (var cancellationProbe = new ServerLatencyProbe(
+                   new DelegateHttpMessageHandler(async (_, token) =>
+                   {
+                       await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                       return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+                   }),
+                   new Uri(SignedBlacklistClient.HealthUrl),
+                   TimeSpan.FromSeconds(1)))
+        using (var cancellation = new CancellationTokenSource())
+        {
+            cancellation.Cancel();
+            try { cancellationProbe.MeasureAsync(cancellation.Token).GetAwaiter().GetResult(); }
+            catch (OperationCanceledException) { callerCancellationPropagated = true; }
+        }
+        Assert(callerCancellationPropagated,
+            "server latency probe propagates caller cancellation during window shutdown");
         Assert(AdminUploadClient.IsUploadUri(new Uri(AdminUploadClient.UploadUrl)),
             "the exact administrator upload endpoint is allowed");
         Assert(!AdminUploadClient.IsUploadUri(new Uri("http://39.105.200.142:8443/admin/other")),
@@ -326,5 +393,13 @@ internal static class SelfTest
     private static void Assert(bool condition, string message)
     {
         if (!condition) throw new Exception("SELF-TEST FAILED: " + message);
+    }
+
+    private sealed class DelegateHttpMessageHandler(
+        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) => handler(request, cancellationToken);
     }
 }

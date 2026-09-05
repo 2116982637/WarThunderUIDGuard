@@ -4,7 +4,7 @@
 
 ## 运行结构
 
-- Nginx 只公开 `/blacklist.json`、`/blacklist.sig`、`/signing-public.xml`、`/updates/*`，并把 `POST /admin/upload` 转发到回环地址。
+- Nginx 只公开 `/health`、`/blacklist.json`、`/blacklist.sig`、`/signing-public.xml`、`/updates/*`，并把 `POST /admin/upload` 转发到回环地址。`/health` 仅返回无正文的 204，且不写访问日志，供客户端每秒显示实际同步服务器延迟。
 - 管理员上传服务仅监听 `127.0.0.1:8090`，执行 HMAC 鉴权、时间窗、Nonce 防重放、限流、基础版本冲突检测、严格 JSON 校验、备份和 RSA 重新签名。
 - 刷新服务每 5 分钟重新签名权威黑名单，并镜像最新稳定 GitHub Release。已有 `blacklist.json` 永远不会被 GitHub 数据覆盖；只有文件缺失时才会从固定公开源初始化。
 - 上传和刷新服务通过 `/var/lib/wtuidguard/data.lock` 共用同一把 `flock` 写锁。

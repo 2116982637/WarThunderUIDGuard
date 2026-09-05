@@ -37,14 +37,15 @@ internal sealed class UploadPasswordDialog : Form
         _password.Margin = new Padding(0);
         UiTheme.StyleTextBox(_password);
 
-        var ok = new Button
+        var ok = new GlassButton
         {
+            IsPrimary = true,
             Text = Localizer.T("Common.OK"),
             DialogResult = DialogResult.OK,
             Size = new Size(104, 36),
             Margin = new Padding(8, 0, 0, 0)
         };
-        var cancel = new Button
+        var cancel = new GlassButton
         {
             Text = Localizer.T("Common.Cancel"),
             DialogResult = DialogResult.Cancel,
@@ -57,7 +58,7 @@ internal sealed class UploadPasswordDialog : Form
         var actions = new FlowLayoutPanel
         {
             AutoSize = false,
-            BackColor = UiTheme.Surface,
+            BackColor = Color.Transparent,
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
             Margin = new Padding(0),
@@ -75,7 +76,7 @@ internal sealed class UploadPasswordDialog : Form
         };
         var layout = new TableLayoutPanel
         {
-            BackColor = UiTheme.Surface,
+            BackColor = Color.Transparent,
             ColumnCount = 1,
             Dock = DockStyle.Fill,
             Margin = new Padding(0),

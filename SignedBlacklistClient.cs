@@ -7,6 +7,7 @@ namespace WarThunderUIDGuard;
 internal static class SignedBlacklistClient
 {
     internal const string DataUrl = "http://39.105.200.142:8443/blacklist.json";
+    internal const string HealthUrl = "http://39.105.200.142:8443/health";
     internal const string SignatureUrl = "http://39.105.200.142:8443/blacklist.sig";
     internal const string UpdateMetadataUrl = "http://39.105.200.142:8443/updates/latest.json";
     internal const string UpdateSignatureUrl = "http://39.105.200.142:8443/updates/latest.sig";
@@ -25,6 +26,8 @@ internal static class SignedBlacklistClient
         string.IsNullOrEmpty(uri.Query) &&
         string.IsNullOrEmpty(uri.Fragment) &&
         string.IsNullOrEmpty(uri.UserInfo);
+
+    internal static bool IsHealthUri(Uri uri) => IsExactServerUri(uri, "/health");
 
     internal static async Task<string> FetchAndVerifyAsync(Uri dataUri, CancellationToken cancellationToken)
     {

@@ -12,17 +12,21 @@ public sealed class MainForm : Form
     private readonly Label _status = new();
     private readonly Label _count = new();
     private readonly ListBox _log = new();
-    private readonly Button _monitorButton = new();
+    private readonly Button _monitorButton = new GlassButton { IsPrimary = true };
     private readonly System.Windows.Forms.Timer _connectionTimeoutTimer = new() { Interval = 10000 };
-    private readonly ComboBox _languageSelector = new();
+    private readonly System.Windows.Forms.Timer _serverLatencyTimer = new() { Interval = 1000 };
+    private readonly ServerLatencyProbe _serverLatencyProbe = new();
+    private readonly CancellationTokenSource _serverLatencyCancellation = new();
+    private readonly ComboBox _languageSelector = new ModernComboBox();
     private readonly Label _languageLabel = new();
     private readonly CheckBox _oneDriveSync = new();
-    private readonly Button _uploadOneDriveButton = new();
-    private readonly Button _pullOneDriveButton = new();
-    private readonly Button _syncNicknameButton = new();
-    private readonly Button _updateButton = new();
+    private readonly Button _uploadOneDriveButton = new GlassButton();
+    private readonly Button _pullOneDriveButton = new GlassButton();
+    private readonly Button _syncNicknameButton = new GlassButton();
+    private readonly Button _updateButton = new GlassButton();
     private readonly Label _subtitle = new();
     private readonly Label _remoteSyncStatus = new();
+    private readonly Label _serverLatencyStatus = new();
     private readonly Label _activityStatus = new();
     private readonly List<Detection> _detections = [];
     private string _statusKey = "Status.NotStarted";
@@ -33,6 +37,9 @@ public sealed class MainForm : Form
     private bool _nicknameSyncBusy;
     private bool _updateBusy;
     private bool _updateExitPending;
+    private bool _serverLatencyBusy;
+    private bool _closing;
+    private ServerLatencyResult? _serverLatencyResult;
     private CancellationTokenSource? _nicknameSyncCancellation;
     private string? _nicknameSyncStatusKey;
     private object[] _nicknameSyncStatusArgs = [];
@@ -42,7 +49,7 @@ public sealed class MainForm : Form
         _store = new DataStore(remoteFetcher: PublicBlacklistDownloader.FetchJsonAsync);
         AutoScaleMode = AutoScaleMode.Dpi;
         MinimumSize = new Size(980, 680);
-        Size = new Size(1180, 780);
+        Size = new Size(1180, 800);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Microsoft YaHei UI", 9.25f);
         BackColor = UiTheme.Background;
@@ -77,12 +84,24 @@ public sealed class MainForm : Form
         });
         _client.IdentityObserved += (uid, alias, source, detail) => Ui(() => HandleDetection(uid, alias, source, detail));
         _connectionTimeoutTimer.Tick += (_, _) => HandleConnectionTimeout();
+        _serverLatencyTimer.Tick += async (_, _) => await RefreshServerLatencyAsync();
+        Shown += async (_, _) =>
+        {
+            _serverLatencyTimer.Start();
+            await RefreshServerLatencyAsync();
+        };
         FormClosed += (_, _) =>
         {
+            _closing = true;
             _nicknameSyncCancellation?.Cancel();
             _nicknameSyncCancellation?.Dispose();
             _connectionTimeoutTimer.Stop();
             _connectionTimeoutTimer.Dispose();
+            _serverLatencyTimer.Stop();
+            _serverLatencyCancellation.Cancel();
+            _serverLatencyTimer.Dispose();
+            _serverLatencyProbe.Dispose();
+            _serverLatencyCancellation.Dispose();
             _client.Dispose();
         };
     }
@@ -91,7 +110,7 @@ public sealed class MainForm : Form
     {
         SuspendLayout();
 
-        var root = new TableLayoutPanel
+        var root = new UiBackdropPanel
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(22),
@@ -100,8 +119,8 @@ public sealed class MainForm : Form
             BackColor = UiTheme.Background,
             AutoScroll = true
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 67));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
         Controls.Add(root);
@@ -115,38 +134,44 @@ public sealed class MainForm : Form
             BackColor = Color.Transparent,
             Margin = new Padding(0)
         };
-        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
-        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 66));
         headerLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         header.Controls.Add(headerLayout);
 
         var brand = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 1,
+            ColumnCount = 2,
             RowCount = 2,
             BackColor = Color.Transparent,
             Margin = new Padding(0)
         };
-        brand.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        brand.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 66));
+        brand.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        brand.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         brand.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var brandMark = new UiBrandMark { Dock = DockStyle.Fill, Margin = new Padding(0, 8, 12, 8) };
+        brand.Controls.Add(brandMark, 0, 0);
+        brand.SetRowSpan(brandMark, 2);
         brand.Controls.Add(new Label
         {
             Text = "UID Guard",
-            Font = new Font("Microsoft YaHei UI", 20.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 22f, FontStyle.Bold),
             ForeColor = UiTheme.TextPrimary,
             AutoSize = false,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.BottomLeft,
             Margin = new Padding(0)
-        }, 0, 0);
+        }, 1, 0);
         _subtitle.Tag = "App.Subtitle";
         _subtitle.ForeColor = UiTheme.TextSecondary;
         _subtitle.AutoSize = false;
         _subtitle.Dock = DockStyle.Fill;
         _subtitle.TextAlign = ContentAlignment.TopLeft;
         _subtitle.Margin = new Padding(1, 2, 0, 0);
-        brand.Controls.Add(_subtitle, 0, 1);
+        _subtitle.AutoEllipsis = true;
+        brand.Controls.Add(_subtitle, 1, 1);
         headerLayout.Controls.Add(brand, 0, 0);
 
         var headerActions = new TableLayoutPanel
@@ -162,13 +187,14 @@ public sealed class MainForm : Form
         var statusRow = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
+            ColumnCount = 3,
             RowCount = 1,
             BackColor = Color.Transparent,
             Margin = new Padding(0)
         };
-        statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36));
+        statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26));
+        statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
         statusRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _remoteSyncStatus.AutoSize = false;
         _remoteSyncStatus.Dock = DockStyle.Fill;
@@ -178,14 +204,24 @@ public sealed class MainForm : Form
         _remoteSyncStatus.Margin = new Padding(0);
         statusRow.Controls.Add(_remoteSyncStatus, 0, 0);
 
+        _serverLatencyStatus.AutoSize = false;
+        _serverLatencyStatus.Dock = DockStyle.Fill;
+        _serverLatencyStatus.TextAlign = ContentAlignment.MiddleCenter;
+        _serverLatencyStatus.AutoEllipsis = true;
+        _serverLatencyStatus.ForeColor = UiTheme.TextSecondary;
+        _serverLatencyStatus.Font = new Font(Font, FontStyle.Bold);
+        _serverLatencyStatus.Margin = new Padding(4, 0, 4, 0);
+        statusRow.Controls.Add(_serverLatencyStatus, 1, 0);
+
         _status.Text = "";
         _status.AutoSize = false;
+        _status.AutoEllipsis = true;
         _status.Dock = DockStyle.Fill;
         _status.TextAlign = ContentAlignment.MiddleRight;
         _status.ForeColor = UiTheme.Warning;
         _status.Font = new Font(Font, FontStyle.Bold);
         _status.Margin = new Padding(0);
-        statusRow.Controls.Add(_status, 1, 0);
+        statusRow.Controls.Add(_status, 2, 0);
         headerActions.Controls.Add(statusRow, 0, 0);
 
         var quickControls = new FlowLayoutPanel
@@ -199,7 +235,7 @@ public sealed class MainForm : Form
             Padding = new Padding(0, 4, 0, 0)
         };
         _monitorButton.Tag = "Button.StartMonitoring";
-        _monitorButton.Size = new Size(170, 38);
+        _monitorButton.Size = new Size(170, 42);
         _monitorButton.Margin = new Padding(12, 0, 0, 0);
         UiTheme.StyleButton(_monitorButton, UiTheme.Primary);
         _monitorButton.Click += (_, _) => ToggleMonitor();
@@ -261,6 +297,7 @@ public sealed class MainForm : Form
         actions.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         actions.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         var add = MakeButton("Button.AddOrUpdate", UiTheme.Success);
+        ((GlassButton)add).IsPrimary = true;
         add.Dock = DockStyle.Fill;
         add.Margin = new Padding(0, 0, 0, 4);
         add.Padding = new Padding(0);
@@ -287,7 +324,7 @@ public sealed class MainForm : Form
             BackColor = Color.Transparent
         };
         gridPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        gridPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        gridPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         gridPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var gridStatusRow = new TableLayoutPanel
@@ -425,8 +462,17 @@ public sealed class MainForm : Form
         }, column, 0);
         control.Dock = DockStyle.Fill;
         control.Margin = new Padding(4, 2, 8, 4);
-        if (control is TextBox textBox) UiTheme.StyleTextBox(textBox);
-        panel.Controls.Add(control, column, 1);
+        if (control is TextBox textBox)
+        {
+            var inputFrame = new UiInputFrame(textBox)
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(4, 2, 8, 7),
+                TabIndex = column
+            };
+            panel.Controls.Add(inputFrame, column, 1);
+        }
+        else panel.Controls.Add(control, column, 1);
     }
 
     private static Panel CreateCard(Padding padding, Padding margin) => new UiCardPanel
@@ -434,12 +480,12 @@ public sealed class MainForm : Form
         Dock = DockStyle.Fill,
         Padding = padding,
         Margin = margin,
-        BackColor = UiTheme.Surface
+        BackColor = Color.Transparent
     };
 
     private static Button MakeButton(string textKey, Color color)
     {
-        var button = new Button { Tag = textKey };
+        var button = new GlassButton { Tag = textKey };
         UiTheme.StyleButton(button, color);
         return button;
     }
@@ -865,6 +911,7 @@ public sealed class MainForm : Form
         RefreshGrid();
         RenderDetectionLog();
         UpdateOneDriveSyncUi();
+        RenderServerLatency();
     }
 
     private static void ApplyTaggedText(Control parent)
@@ -890,6 +937,59 @@ public sealed class MainForm : Form
     private void RenderStatus()
     {
         _status.Text = $"{_statusPrefix} {Localizer.T(_statusKey)}";
+    }
+
+    private async Task RefreshServerLatencyAsync()
+    {
+        if (_serverLatencyBusy || _closing || IsDisposed || !Visible || WindowState == FormWindowState.Minimized)
+            return;
+        _serverLatencyBusy = true;
+        try
+        {
+            var result = await _serverLatencyProbe.MeasureAsync(_serverLatencyCancellation.Token);
+            if (_closing || IsDisposed || Disposing) return;
+            _serverLatencyResult = result;
+            RenderServerLatency();
+        }
+        catch (OperationCanceledException) when (_closing)
+        {
+        }
+        catch (ObjectDisposedException) when (_closing)
+        {
+        }
+        catch (Exception) when (!_closing)
+        {
+            _serverLatencyResult = ServerLatencyResult.Unavailable();
+            RenderServerLatency();
+        }
+        finally
+        {
+            _serverLatencyBusy = false;
+        }
+    }
+
+    private void RenderServerLatency()
+    {
+        if (_serverLatencyResult is not { } result)
+        {
+            _serverLatencyStatus.Text = Localizer.T("ServerLatency.Checking");
+            _serverLatencyStatus.ForeColor = UiTheme.TextSecondary;
+            return;
+        }
+
+        _serverLatencyStatus.Text = result.Status switch
+        {
+            ServerLatencyStatus.Online => Localizer.F("ServerLatency.Value", result.Milliseconds),
+            ServerLatencyStatus.TimedOut => Localizer.T("ServerLatency.Timeout"),
+            _ => Localizer.T("ServerLatency.Offline")
+        };
+        _serverLatencyStatus.ForeColor = result.Status switch
+        {
+            ServerLatencyStatus.Online when result.Milliseconds <= 100 => UiTheme.Success,
+            ServerLatencyStatus.Online when result.Milliseconds <= 250 => UiTheme.Warning,
+            ServerLatencyStatus.Online => UiTheme.Danger,
+            _ => UiTheme.Danger
+        };
     }
 
     private void RenderDetectionLog()
